@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teyvat Archives 2026</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        header { width: 100%; max-width: 1000px; text-align: center; }
+
+        .main-nav { display: flex; justify-content: center; gap: 15px; margin-bottom: 25px; }
+        .main-nav button {
+            background: #222; border: 1px solid #444; color: #888;
+            padding: 10px 25px; border-radius: 20px; cursor: pointer;
+            font-weight: bold; text-transform: uppercase; transition: 0.3s;
+        }
+        .main-nav button.active { background: white; color: black; border-color: white; }
+
+        .search-wrapper { width: 100%; max-width: 400px; margin: 0 auto 20px; }
+        .search-wrapper input {
+            width: 100%; background: #1a1a1a; border: 1px solid #333;
+            padding: 12px; border-radius: 25px; color: white; text-align: center; outline: none;
+        }
+
+        .sub-filters { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        .sub-filters button {
+            background: #222; border: 1px solid #444; color: white;
+            padding: 8px 15px; border-radius: 8px; cursor: pointer;
+        }
+        .sub-filters button.active { background: #ffcc00; color: black; border-color: #ffcc00; }
+
+        .filters { display: flex; justify-content: center; gap: 8px; margin-bottom: 30px; flex-wrap: wrap; }
+        .filters button {
+            background: #1a1a1a; border: 1px solid #333; color: #aaa;
+            padding: 6px 15px; border-radius: 8px; cursor: pointer; text-transform: uppercase;
+        }
+        .filters button.active { background: white; color: black; border-color: white; }
+
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px; width: 100%; max-width: 1200px;
+        }
+
+        .card {
+            background: #1a1a1a; border-radius: 15px; padding: 10px;
+            display: flex; flex-direction: column; align-items: center;
+            border: 2px solid #333; position: relative; transition: 0.3s;
+        }
+        .card.r-5 { border-color: #ffb13f; }
+        .card.r-4 { border-color: #d28fd2; }
+
+        .img-container { width: 100%; height: 160px; display: flex; justify-content: center; align-items: center; }
+        .img-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        .card-info { width: 100%; text-align: center; margin-top: 10px; }
+        .type-badge {
+            display: inline-block; padding: 2px 10px; border-radius: 4px;
+            font-size: 0.7rem; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;
+        }
+        .bg-geo { background: #ffb83d; color: black; }
+        .bg-pyro { background: #ff4b4b; color: white; }
+        .bg-hydro { background: #1e90ff; color: white; }
+        .bg-dendro { background: #44db44; color: black; }
+        .bg-electro { background: #bc54ff; color: white; }
+        .bg-cryo { background: #7df9ff; color: black; }
+        .bg-anemo { background: #00fa9a; color: black; }
+        .bg-weapon { background: #555; color: white; }
+
+        h3 { margin: 5px 0 0; font-size: 0.9rem; }
+        .no-data { grid-column: 1 / -1; text-align: center; color: #666; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="main-nav" id="mainTabs">
+            <button onclick="switchTab('chars', this)" class="active">Personnages</button>
+            <button onclick="switchTab('weapons', this)">ARMES</button>
+            <button onclick="switchTab('teams', this)">Teams</button>
+        </div>
+
+        <div class="search-wrapper">
+            <input type="text" placeholder="Rechercher..." oninput="updateSearch(this.value)">
+        </div>
+
+        <div class="sub-filters" id="rarityFilters">
+            <button onclick="setRarity('Tous', this)" class="active">TOUS</button>
+            <button onclick="setRarity(5, this)">5⭐</button>
+            <button onclick="setRarity(4, this)">4⭐</button>
+            </div>
+
+        <div id="element-filters" class="filters">
+            <button onclick="setElement('Tous', this)" class="active">TOUS</button>
+            <button onclick="setElement('Pyro', this)">PYRO</button>
+            <button onclick="setElement('Hydro', this)">HYDRO</button>
+            <button onclick="setElement('Anémo', this)">ANÉMO</button>
+            <button onclick="setElement('Électro', this)">ÉLECTRO</button>
+            <button onclick="setElement('Dendro', this)">DENDRO</button>
+            <button onclick="setElement('Cryo', this)">CRYO</button>
+            <button onclick="setElement('Géo', this)">GÉO</button>
+        </div>
+
+        <div id="char-weapon-filters" class="filters">
+            <button onclick="setCharWeapon('Tous', this)" class="active">TOUTES LES ARMES</button>
+            <button onclick="setCharWeapon('Épée à une main', this)">ÉPÉE À UNE MAIN</button>
+            <button onclick="setCharWeapon('Épée à deux main', this)">ÉPÉE À DEUX MAIN</button>
+            <button onclick="setCharWeapon('Lance', this)">LANCE</button>
+            <button onclick="setCharWeapon('Arc', this)">ARC</button>
+            <button onclick="setCharWeapon('Catalyseur', this)">CATALYSEUR</button>
+        </div>
+
+        <div id="weapon-type-filters" class="filters" style="display:none;">
+            <button onclick="setWeaponType('Tous', this)" class="active">TOUS</button>
+            <button onclick="setWeaponType('Épée à une main', this)">ÉPÉE À UNE MAIN</button>
+            <button onclick="setWeaponType('Épée à deux main', this)">ÉPÉE À DEUX MAIN</button>
+            <button onclick="setWeaponType('Lance', this)">LANCE</button>
+            <button onclick="setWeaponType('Arc', this)">ARC</button>
+            <button onclick="setWeaponType('Catalyseur', this)">CATALYSEUR</button>
+
+    </header>
+
+    <main id="grid"></main>
+
+    <script>
+        // --- DONNÉES AVEC TRADUCTION ---
+        // 'n' est le nom affiché (FR), 'en' est le nom pour l'image (Wiki)
+        const charData = [
+            {n:"Aino",e:"Hydro",r:4,w:"Épée à deux main"},{n:"Albedo",e:"Géo",r:5,w:"Épée à une main"},{n:"Alhaitham",e:"Dendro",r:5,w:"Épée à une main"},{n:"Aloy",e:"Cryo",r:5,w:"Arc"},{n:"Amber",e:"Pyro",r:4,w:"Arc"},{n:"Arataki Itto",e:"Géo",r:5,w:"Épée à deux main"},{n:"Arlecchino",e:"Pyro",r:5,w:"Lance"},{n:"Baizhu",e:"Dendro",r:5,w:"Catalyseur"},{n:"Barbara",e:"Hydro",r:4,w:"Catalyseur"},{n:"Beidou",e:"Électro",r:4,w:"Épée à deux main"},{n:"Bennett",e:"Pyro",r:4,w:"Épée à une main"},{n:"Candace",e:"Hydro",r:4,w:"Lance"},{n:"Charlotte",e:"Cryo",r:4,w:"Catalyseur"},{n:"Chasca",e:"Anémo",r:5,w:"Arc"},{n:"Chevreuse",e:"Pyro",r:4,w:"Lance"},{n:"Chiori",e:"Géo",r:5,w:"Épée à une main"},{n:"Chongyun",e:"Cryo",r:4,w:"Épée à deux main"},{n:"Citlali",e:"Cryo",r:5,w:"Catalyseur"},{n:"Clorinde",e:"Électro",r:5,w:"Épée à une main"},{n:"Collei",e:"Dendro",r:4,w:"Arc"},{n:"Columbina",e:"Hydro",r:5,w:"Catalyseur"},{n:"Cyno",e:"Électro",r:5,w:"Lance"},{n:"Dahlia",e:"Hydro",r:4,w:"Épée à une main"},{n:"Dehya",e:"Pyro",r:5,w:"Épée à deux main"},{n:"Diluc",e:"Pyro",r:5,w:"Épée à deux main"},{n:"Diona",e:"Cryo",r:4,w:"Arc"},{n:"Dori",e:"Électro",r:4,w:"Épée à deux main"},{n:"Durin",e:"Pyro",r:5,w:"Épée à une main",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Durin_Icon.png"},{n:"Émilie",en:"Emilie",e:"Dendro",r:5,w:"Lance"},{n:"Escoffier",e:"Cryo",r:5,w:"Lance"},{n:"Eula",e:"Cryo",r:5,w:"Épée à deux main"},{n:"Faruzan",e:"Anémo",r:4,w:"Arc"},{n:"Fischl",e:"Électro",r:4,w:"Arc"},{n:"Flins",e:"Électro",r:5,w:"Lance",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Flins_Icon.png"},{n:"Freminet",e:"Cryo",r:4,w:"Épée à deux main"},{n:"Furina",e:"Hydro",r:5,w:"Épée à une main"},{n:"Gaming",e:"Pyro",r:4,w:"Épée à deux main"},{n:"Ganyu",e:"Cryo",r:5,w:"Arc"},{n:"Gorou",e:"Géo",r:4,w:"Arc"},{n:"Hu Tao",e:"Pyro",r:5,w:"Lance"},{n:"Iansan",e:"Électro",r:4,w:"Lance"},{n:"Ifa",e:"Anémo",r:4,w:"Catalyseur"},{n:"Illuga",e:"Géo",r:4,w:"Lance",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Illuga_Icon.png"},{n:"Ineffa",e:"Électro",r:5,w:"Lance"},{n:"Jahoda",e:"Anémo",r:4,w:"Arc",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Jahoda_Icon.png"},{n:"Jean",e:"Anémo",r:5,w:"Épée à une main"},{n:"Kachina",e:"Géo",r:4,w:"Lance"},{n:"Kaedehara Kazuha",e:"Anémo",r:5,w:"Épée à une main"},{n:"Kaeya",e:"Cryo",r:4,w:"Épée à une main"},{n:"Kamisato Ayaka",e:"Cryo",r:5,w:"Épée à une main"},{n:"Kamisato Ayato",e:"Hydro",r:5,w:"Épée à une main"},{n:"Kaveh",e:"Dendro",r:4,w:"Épée à deux main"},{n:"Keqing",e:"Électro",r:5,w:"Épée à une main"},{n:"Kinich",e:"Dendro",r:5,w:"Épée à deux main"},{n:"Kirara",e:"Dendro",r:4,w:"Épée à une main"},{n:"Klee",e:"Pyro",r:5,w:"Catalyseur"},{n:"Kujou Sara",e:"Électro",r:4,w:"Arc"},{n:"Kuki Shinobu",e:"Électro",r:4,w:"Épée à une main"},{n:"Lan Yan",e:"Anémo",r:4,w:"Catalyseur"},{n:"Lauma",e:"Dendro",r:5,w:"Catalyseur"},{n:"Layla",e:"Cryo",r:4,w:"Épée à une main"},{n:"Lisa",e:"Électro",r:4,w:"Catalyseur"},{n:"Linnea",e:"Géo",r:5,w:"Arc",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Linnea_Icon.png"},{n:"Lynette",e:"Anémo",r:4,w:"Épée à une main"},{n:"Lyney",e:"Pyro",r:5,w:"Arc"},{n:"Mavuika",e:"Pyro",r:5,w:"Épée à deux main"},{n:"Mika",e:"Cryo",r:4,w:"Lance"},{n:"Mona",e:"Hydro",r:5,w:"Catalyseur"},{n:"Mualani",e:"Hydro",r:5,w:"Catalyseur"},{n:"Nahida",e:"Dendro",r:5,w:"Catalyseur"},{n:"Navia",e:"Géo",r:5,w:"Épée à deux main"},{n:"Nefer",e:"Dendro",r:5,w:"Catalyseur",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Nefer_Icon.png"},{n:"Neuvillette",e:"Hydro",r:5,w:"Catalyseur"},{n:"Nilou",e:"Hydro",r:5,w:"Épée à une main"},{n:"Ningguang",e:"Géo",r:4,w:"Catalyseur"},{n:"Noëlle",en:"Noelle",e:"Géo",r:4,w:"Épée à deux main"},{n:"Nomade",en:"Wanderer",e:"Anémo",r:5,w:"Catalyseur"},{n:"Ororon",e:"Électro",r:4,w:"Arc"},{n:"Qiqi",e:"Cryo",r:5,w:"Épée à une main"},{n:"Razor",e:"Électro",r:4,w:"Épée à deux main"},{n:"Rosaria",e:"Cryo",r:4,w:"Lance"},{n:"Sangonomiya Kokomi",e:"Hydro",r:5,w:"Catalyseur"},{n:"Sayu",e:"Anémo",r:4,w:"Épée à deux main"},{n:"Sethos",e:"Électro",r:4,w:"Arc"},{n:"Shenhe",e:"Cryo",r:5,w:"Lance"},{n:"Shikanoin Heizou",e:"Anémo",r:4,w:"Catalyseur"},{n:"Shogun Raiden",en:"Raiden Shogun",e:"Électro",r:5,w:"Lance"},{n:"Sigewinne",e:"Hydro",r:5,w:"Arc"},{n:"Skirk",e:"Cryo",r:5,w:"Épée à une main"},{n:"Sucrose",e:"Anémo",r:4,w:"Catalyseur"},{n:"Tartaglia",e:"Hydro",r:5,w:"Arc"},{n:"Thomas",en:"Thoma",e:"Pyro",r:4,w:"Lance"},{n:"Tighnari",e:"Dendro",r:5,w:"Arc"},{n:"Varesa",e:"Électro",r:5,w:"Catalyseur"},{n:"Varka",e:"Anémo",r:5,w:"Épée à deux main",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Varka_Icon.png"},{n:"Venti",e:"Anémo",r:5,w:"Arc"},{n:"Wriothesley",e:"Cryo",r:5,w:"Catalyseur"},{n:"Xiangling",e:"Pyro",r:4,w:"Lance"},{n:"Xianyun",e:"Anémo",r:5,w:"Catalyseur"},{n:"Xiao",e:"Anémo",r:5,w:"Lance"},{n:"Xilonen",e:"Géo",r:5,w:"Épée à une main"},{n:"Xingqiu",e:"Hydro",r:4,w:"Épée à une main"},{n:"Xinyan",e:"Pyro",r:4,w:"Épée à deux main"},{n:"Yae Miko",e:"Électro",r:5,w:"Catalyseur"},{n:"Yanfei",e:"Pyro",r:4,w:"Catalyseur"},{n:"Yaoyao",e:"Dendro",r:4,w:"Lance"},{n:"Yelan",e:"Hydro",r:5,w:"Arc"},{n:"Yoimiya",e:"Pyro",r:5,w:"Arc"},{n:"Yumemizuki Mizuki",e:"Anémo",r:5,w:"Catalyseur"},{n:"Yun Jin",e:"Géo",r:4,w:"Lance"},{n:"Zhongli",e:"Géo",r:5,w:"Lance"},{n:"Zibai",e:"Géo",r:5,w:"Épée à une main",fullUrl:"https://genshin-impact.fandom.com/wiki/Special:FilePath/Zibai_Icon.png"}
+        ];
+        const weaponData = [
+            {n:"Absolution",t:"Épée à une main",r:"5"},{n:"Ailes de la Voûte d'Azur",en:"Skyward Harp",t:"Arc",r:"5"},{n:"Appel de sérénité",en:"Serenity's Call",t:"Épée à une main",r:"4"},{n:"Arc d'Amos",en:"Amos' Bow",t:"Arc",r:5},{n:"Athame Artis",t:"Épée à une main",r:"5"},{n:"Aube du tisse-lune",en:"Moonweaver's Dawn",t:"Épée à une main",r:"4"},{n:"Bâton d'Homa",en:"Staff of Homa",t:"Lance",r:5},{n:"Chanson de patrouille de sommet",en:"Peak Patrol Song",t:"Épée à une main",r:"5"},{n:"Clair de lune de Xiphos",en:"Xiphos' Moonlight",t:"Épée à une main",r:"4"},{n:"Clé de Khaj-Nisut",en:"Key of Khaj-Nisut",t:"Épée à une main",r:"5"},{n:"Corde de pluie blanche",en:"Silvershower Heartstrings",t:"Arc",r:"5"},{n:"Coupeur de jade primordial",en:"Primordial Jade Cutter",t:"Épée à une main",r:"5"},{n:"Croc de loup",en:"Wolf-Fang",t:"Épée à une main",r:"4"},{n:"Croc suppurant",en:"Festering Desire",t:"Épée à une main",r:"4"},{n:"Éclair des impasses",en:"The Alley Flash",t:"Épée à une main",r:"4"},{n:"Éclat lunaire luminescent",en:"Lightbearing Moonshard",t:"Épée à une main",r:"5"},{n:"Éclasur",en:"Azurelight",t:"Épée à une main",r:"5"},{n:"Épée de Favonius",en:"Favonius Sword",t:"Épée à une main",r:"4"},{n:"Épée de la descente",en:"Sword of Descension",t:"Épée à une main",r:"4"},{n:"Épée du faucon",en:"Aquila Favonia",t:"Épée à une main",r:"5"},{n:"Épée longue de Rochenoire",en:"Blackcliff Longsword",t:"Épée à une main",r:"4"},{n:"Épée longue royale",en:"Royal Longsword",t:"Épée à une main",r:"4"},{n:"Épée noire",en:"The Black Sword",t:"Épée à une main",r:"4"},{n:"Épée rituelle",en:"Sacrificial Sword",t:"Épée à une main",r:"4"},{n:"Étoile polaire",en:"Polar Star",t:"Arc",r:"5"},{n:"Final des profondeurs",en:"Finale of the Deep",t:"Épée à une main",r:"4"},{n:"Flûte",en:"The Flute",t:"Épée à une main",r:"4"},{n:"Flûte d'ezpitzal",en:"Flute of Ezpitzal",t:"Épée à une main",r:"4"},{n:"Fuseau de cinabre",en:"Cinnabar Spindle",t:"Épée à une main",r:"4"},{n:"Kagotsurube Isshin",t:"Épée à une main",r:"4"},{n:"L'assistant du docker",en:"The Dockhand's Assistant",t:"Épée à une main",r:"4"},{n:"La calamité d'Eshu",en:"Calamity of Eshu",t:"Épée à une main",r:"4"},{n:"La première grande magie",en:"The First Great Magic",t:"Arc",r:"5"},{n:"La voie du chasseur",en:"Hunter's Path",t:"Arc",r:"5"},{n:"Lame d'aubier",en:"Sapwood Blade",t:"Épée à une main",r:"4"},{n:"Lame de la Voûte d'Azur",en:"Skyward Blade",t:"Épée à une main",r:"5"},{n:"Lame du Narzissenkreuz",en:"Sword of Narzissenkreuz",t:"Épée à une main",r:"4"},{n:"Lame kageuchi d'Amenoma",en:"Amenoma Kageuchi",t:"Épée à une main",r:"4"},{n:"Les chroniques de l'aube",en:"The Daybreak Chronicles",t:"Arc",r:"5"},{n:"Lumière d'incision foliaire",en:"Light of Foliar Incision",t:"Épée à une main",r:"5"},{n:"Lune ondulante de Futsu",en:"Haran Geppaku Futsu",t:"Épée à une main",r:"5"},{n:"Mort-du-Loup",en:"Wolf's Gravestone",t:"Épée à deux main",r:5},{n:"Mouvement Vagabond",en:"The Widsith",t:"Catalyseur",r:4},{n:"Os robuste",en:"Sturdy Bone",t:"Épée à une main",r:"4"},{n:"Passeur du Fleuve cendré",en:"Fleuve Cendre Ferryman",t:"Épée à une main",r:"4"},{n:"Piqûre de fer",en:"Iron Sting",t:"Épée à une main",r:"4"},{n:"Pluie florale",en:"Toukabou Shigure",t:"Épée à une main",r:"4"},{n:"Plumage cramoisi du vautour astral",en:"Astral Vulture's Crimson Plumage",t:"Arc",r:"5"},{n:"Pulsation du tonnerre",en:"Thundering Pulse",t:"Arc",r:"5"},{n:"Reflet de tranche-brume", en:"Mistsplitter Reforged",t: "Épée à une main",r: 5},{n:"Rugissement du Lion",en:"Lion's Roar",t:"Épée à une main",r:"4"},{n:"Serment de gel doré",en:"Golden Frostbound Oath",t:"Arc",r:"5"},{n:"Serment de la liberté",en:"Freedom-Sworn",t:"Épée à une main",r:"5"},{n:"Simulacre d'eau",en:"Aqua Simulacra",t:"Arc",r:"5"},{n:"Splendeur des eaux calmes",en:"Splendor of Tranquil Waters",t:"Épée à une main",r:"5"},{n:"Tailleur de pierre (prototype)",en:"Prototype Rancour",t:"Épée à une main",r:"4"},{n:"Tranche-sommets",en:"Summit Shaper",t:"Épée à une main",r:"5"},{n:"Ultime soupir",en:"Elegy for the End",t:"Arc",r:"5"},{n:"Uraku Misugiri",t:"Épée à une main",r:"5"},
+        ];
+
+        let currentTab = 'chars';
+        let currentRarity = 'Tous';
+        let currentElement = 'Tous';
+        let currentWeaponType = 'Tous';
+        let currentCharWeapon = 'Tous';
+        let searchQuery = '';
+
+        function setActive(btn, containerId) {
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.querySelectorAll('button').forEach(b => b.classList.remove('active'));            btn.classList.add('active');
+                btn.classList.add('active');
+            }
+        }
+
+        function setRarity(r, btn) { currentRarity = r; setActive(btn, 'rarityFilters'); render(); }
+        function setElement(e, btn) { currentElement = e; setActive(btn, 'element-filters'); render(); }
+        function setWeaponType(t, btn) { currentWeaponType = t; setActive(btn, 'weapon-type-filters'); render(); }
+        function setCharWeapon(w, btn) { currentCharWeapon = w; setActive(btn, 'char-weapon-filters'); render(); }
+        function updateSearch(v) { searchQuery = v; render(); }
+
+
+        function switchTab(tab, btn) {
+            currentTab = tab;
+            setActive(btn, 'mainTabs');
+
+            // Reset des filtres pour éviter les bugs
+            currentRarity = 'Tous';
+            currentElement = 'Tous';
+            currentCharWeapon = 'Tous'
+            currentWeaponType = 'Tous';
+
+            // Affiche ou cache les menus selon l'onglet
+            const ids = ['rarityFilters', 'element-filters', 'char-weapon-filters', 'weapon-type-filters'];            
+            ids.forEach(id => {
+                const cont = document.getElementById(id);
+                if (cont) {
+                    const first = cont.querySelector('button');
+                    if (first) setActive(first, id);
+                }
+            });
+            
+            // Affichage des menus
+            const isChar = (tab === 'chars');
+            const isWep = (tab === 'weapons');
+            
+            document.getElementById('element-filters').style.display = isChar ? 'flex' : 'none';
+            document.getElementById('char-weapon-filters').style.display = isChar ? 'flex' : 'none';
+            document.getElementById('weapon-type-filters').style.display = isWep ? 'flex' : 'none'; 
+            
+            // Boutons d'étoiles bonus (1, 2, 3)
+            const extra = [document.getElementById('btn-3-star'), document.getElementById('btn-2-star'), document.getElementById('btn-1-star')];
+            extra.forEach(b => { if(b) b.style.display = isWep ? 'inline-block' : 'none' });
+            
+            render();
+        }
+
+        function render() {
+            const grid = document.getElementById('grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            let data = (currentTab === 'chars') ? charData : weaponData;
+
+            const filtered = data.filter(item => {
+                const matchSearch = item.n.toLowerCase().includes(searchQuery.toLowerCase());
+                const matchRarity = currentRarity === 'Tous' || item.r === currentRarity;
+                
+                if (currentTab === 'chars') {
+                    const matchElem = (currentElement === 'Tous' || item.e === currentElement)
+                    const matchWep = (currentCharWeapon === 'Tous' || item.w === currentCharWeapon)
+                    return matchSearch && matchRarity && matchElem && matchWep;
+                } else {
+                    const matchType = (currentWeaponType === 'Tous' || item.t === currentWeaponType);
+                    return matchSearch && matchRarity && matchType
+                }
+            });
+            
+            if (currentTab === 'teams') {
+                grid.innerHTML = '<div class="no-data">L\'onglet Teams est en cours de développement...</div>';
+                return;
+            }
+
+            grid.innerHTML = filtered.map(item => {
+                let imgUrl;
+                if (item.fullUrl) {
+                    imgUrl = item.fullUrl;
+                } else {
+                    const nameForUrl = (item.en || item.n).replace(/\s+/g, '_');
+                    const typeFolder = (currentTab === 'chars') ? 'Character' : 'Weapon';
+                    const suffix = (currentTab === 'chars') ? '_Thumb' : '';
+                    imgUrl = `https://genshin-impact.fandom.com/wiki/Special:FilePath/${typeFolder}_${nameForUrl}${suffix}.png?width=250`;
+                }
+                
+                const typeLabel = item.e || item.t;
+                const typeClass = item.e ? `bg-${item.e.toLowerCase().replace('é','e')}` : 'bg-weapon';
+
+                return `
+                    <div class="card r-${item.r}">
+                        <div class="rarity-badge">${item.r} ⭐</div>
+                        <div class="img-container">
+                            <img src="${imgUrl}" onerror="this.src='https://ui-avatars.com/api/?name=${item.n}&background=333&color=fff'">
+                        </div>
+                        <div class="card-info">
+                            <span class="type-badge ${typeClass}">${typeLabel}</span>
+                            <h3>${item.n}</h3>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        render();
+    </script>
+</body>
+</html>
