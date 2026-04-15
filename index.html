@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teyvat Archives 2026</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <div class="main-nav" id="mainTabs">
+            <button onclick="switchTab('chars', this)" class="active">Personnages</button>
+            <button onclick="switchTab('weapons', this)">ARMES</button>
+            <button onclick="switchTab('teams', this)">Teams</button>
+        </div>
+
+        <div class="search-wrapper">
+            <input type="text" placeholder="Rechercher..." oninput="updateSearch(this.value)">
+        </div>
+
+        <div class="sub-filters" id="rarityFilters">
+            <button onclick="setRarity('Tous', this)" class="active">TOUS</button>
+            <button onclick="setRarity(5, this)">5⭐</button>
+            <button onclick="setRarity(4, this)">4⭐</button>
+        </div>
+
+        <div id="element-filters" class="filters">
+            <button onclick="setElement('Tous', this)" class="active">TOUS</button>
+            <button onclick="setElement('Pyro', this)">PYRO</button>
+            <button onclick="setElement('Hydro', this)">HYDRO</button>
+            <button onclick="setElement('Anémo', this)">ANÉMO</button>
+            <button onclick="setElement('Électro', this)">ÉLECTRO</button>
+            <button onclick="setElement('Dendro', this)">DENDRO</button>
+            <button onclick="setElement('Cryo', this)">CRYO</button>
+            <button onclick="setElement('Géo', this)">GÉO</button>
+        </div>
+
+        <div id="char-weapon-filters" class="filters">
+            <button onclick="setCharWeapon('Tous', this)" class="active">TOUTES LES ARMES</button>
+            <button onclick="setCharWeapon('Épée à une main', this)">ÉPÉE À UNE MAIN</button>
+            <button onclick="setCharWeapon('Épée à deux main', this)">ÉPÉE À DEUX MAIN</button>
+            <button onclick="setCharWeapon('Lance', this)">LANCE</button>
+            <button onclick="setCharWeapon('Arc', this)">ARC</button>
+            <button onclick="setCharWeapon('Catalyseur', this)">CATALYSEUR</button>
+        </div>
+
+        <div id="weapon-type-filters" class="filters" style="display:none;">
+            <button onclick="setWeaponType('Tous', this)" class="active">TOUS</button>
+            <button onclick="setWeaponType('Épée à une main', this)">ÉPÉE À UNE MAIN</button>
+            <button onclick="setWeaponType('Épée à deux main', this)">ÉPÉE À DEUX MAIN</button>
+            <button onclick="setWeaponType('Lance', this)">LANCE</button>
+            <button onclick="setWeaponType('Arc', this)">ARC</button>
+            <button onclick="setWeaponType('Catalyseur', this)">CATALYSEUR</button>
+        </div>
+    </header>
+
+    <div id="characterPicker" class="modal">
+        <div class="modal-content">
+            <h3>Choisir un personnage</h3>
+            <div id="pickerGrid" class="picker-grid"></div>
+            <button onclick="closePicker()">Annuler</button>
+        </div>
+    </div> 
+    
+    <div id="grid" class="grid"></div>
+
+    <main id="grid"></main>
+
+    <script src="script.js"></script>
+</body>
+</html>
