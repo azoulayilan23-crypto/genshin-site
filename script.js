@@ -46,13 +46,25 @@ function clearTeam(index) { allTeams[index].members = [null, null, null, null]; 
 function switchTab(tab, btn) {
     currentTab = tab;
     if(btn) setActive(btn, 'mainTabs');
+    
+    // Réinitialisation des filtres
     currentRarity = 'Tous';
     currentElement = 'Tous';
     currentCharWeapon = 'Tous';
     currentWeaponType = 'Tous';
+
+    // --- GESTION DE LA VISIBILITÉ DES FILTRES ---
+    const isTeamTab = (tab === 'teams');
+    
+    // Masquer/Afficher la barre de recherche et les raretés
+    document.querySelector('input[oninput="updateSearch(this.value)"]').style.display = isTeamTab ? 'none' : 'block';
+    document.getElementById('rarityFilters').style.display = isTeamTab ? 'none' : 'flex';
+
+    // Gestion des autres filtres spécifiques
     document.getElementById('element-filters').style.display = (tab === 'chars') ? 'flex' : 'none';
     document.getElementById('char-weapon-filters').style.display = (tab === 'chars') ? 'flex' : 'none';
     document.getElementById('weapon-type-filters').style.display = (tab === 'weapons') ? 'flex' : 'none'; 
+    
     render();
 }
 
