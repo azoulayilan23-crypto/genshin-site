@@ -78,7 +78,7 @@ function render() {
         grid.innerHTML = `
             <div style="width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:15px; padding: 10px;">
                 <button class="add-team-btn" onclick="addTeam()" style="padding:8px 16px; cursor:pointer; background:#4CAF50; color:white; border:none; border-radius:5px; font-weight:bold;">Ajouter une nouvelle équipe</button>
-                <div id="teams-container" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:20px; width:100%;">
+                <div id="teams-container" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; width:100%;">
             </div>`;
         
         const teamsContainer = document.getElementById('teams-container');
