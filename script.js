@@ -76,9 +76,9 @@ function render() {
 
     if (currentTab === 'teams') {
         grid.innerHTML = `
-            <div style="width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding: 0;">
-                <button class="add-team-btn" onclick="addTeam()" style="margin-left:10px; padding:6px 12px; cursor:pointer; background:#4CAF50; color:white; border:none; border-radius:5px; font-weight:bold; font-size:12px;">Ajouter une nouvelle équipe</button>
-                <div id="teams-container" style="display:flex; flex-direction:column; gap:12px; width:100%;"></div>
+            <div style="width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:15px; padding: 10px;">
+                <button class="add-team-btn" onclick="addTeam()" style="padding:8px 16px; cursor:pointer; background:#4CAF50; color:white; border:none; border-radius:5px; font-weight:bold;">Ajouter une nouvelle équipe</button>
+                <div id="teams-container" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; width:100%;">
             </div>`;
         
         const teamsContainer = document.getElementById('teams-container');
