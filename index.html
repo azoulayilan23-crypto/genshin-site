@@ -389,95 +389,157 @@
                 } 
                 // --- NOUVEL ONGLET : AFFICHAGE DES TALENTS ET ATTACKS ---
                 else if (currentTab === 'talents') {
-                    card.innerHTML = `
+                    let cardHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
                             <span class="badge" style="background-color: var(--input-bg)">${item.vision}</span>
                         </div>
                         <h3 style="font-size:1.2rem; margin:10px 0 5px 0; color: var(--primary-color);">${item.name}</h3>
-                        
-                        <div class="talent-box">
-                            <div class="talent-name">⚔️ Attaque Normale : ${item.normale || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.desc || 'Aucune description disponible.'}</p>
-                        </div>
-                        
-                        <div class="talent-box">
-                            <div class="talent-name">🌀 Compétence élémentaire (E) : ${item.compétence || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.e || 'Aucune description disponible.'}</p>
-                        </div>
-                        
-                        <div class="talent-box">
-                            <div class="talent-name">💥 Déchaînement élémentaire (Q) : ${item.ultime || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.q || 'Aucune description disponible.'}</p>
-                        </div>
-
-                        <div class="talent-box">
-                            <div class="talent-name">💥 Aptitude d'élévation n°1 : ${item.élévation1 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.e || 'Aucune description disponible.'}</p>
-                        </div>
-
-                        <div class="talent-box">
-                            <div class="talent-name">💥 Aptitude d'élévation n°2 : ${item.élévation2 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.e || 'Aucune description disponible.'}</p>
-                        </div>
-                        
-                        <div class="talent-box">
-                            <div class="talent-name">💥 Aptitude passive n°1 : ${item.passive1 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.e || 'Aucune description disponible.'}</p>
-                        </div>
-                         <div class="talent-box">
-                            <div class="talent-name">💥 Aptitude passive n°2 : ${item.passive2 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.e || 'Aucune description disponible.'}</p>
-                        </div>
-
-                        <div class="talent-box">
-                            <div class="talent-name">💥 Aptitude suplémentaire : ${item.supplémentaire || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.e || 'Aucune description disponible.'}</p>
-                        </div>
-
                     `;
+                    
+                    if (item.normale) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">⚔️ Attaque Normale : ${item.normale}</div>
+                                <p class="talent-desc">${item.desc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+                    
+                    if (item.compétence) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">🌀 Compétence élémentaire (E) : ${item.compétence}</div>
+                                <p class="talent-desc">${item.compdesc || 'Aucune description disponible.'}</p>
+                                <p style="font-style: italic; color: #aaa;">"${item.infocomp || ''}"</p>
+                            </div>
+                        `;
+                    }
+                    
+                    if (item.ultime) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">💥 Déchaînement élémentaire (Q) : ${item.ultime}</div>
+                                <p class="talent-desc">${item.ultdesc || 'Aucune description disponible.'}</p>
+                                <p style="font-style: italic; color: #aaa;">"${item.infoult || ''}"</p>
+                            </div>
+                        `;
+                    }
+
+                    if (item.élévation1) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">💥 Aptitude d'élévation n°1 : ${item.élévation1}</div>
+                                <p class="talent-desc">${item.elevdesc1 || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+
+                    if (item.élévation2) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">💥 Aptitude d'élévation n°2 : ${item.élévation2}</div>
+                                <p class="talent-desc">${item.elevdesc2 || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+                    
+                    if (item.passive1) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">💥 Aptitude passive n°1 : ${item.passive1}</div>
+                                <p class="talent-desc">${item.passdesc1 || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+
+                    if (item.passive2) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">💥 Aptitude passive n°2 : ${item.passive2}</div>
+                                <p class="talent-desc">${item.passdesc2 || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+
+                    if (item.supplémentaire) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">💥 Aptitude supplémentaire : ${item.supplémentaire}</div>
+                                <p class="talent-desc">${item.suppdesc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+
+                    card.innerHTML = cardHTML;
                     // On permet quand même d'ouvrir la modale globale au clic
                     card.addEventListener('click', () => openDetails(item, 'characters'));
                 }
 
                 else if (currentTab === 'constellation') {
-                    card.innerHTML = `
+                    let cardHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
                             <span class="badge" style="background-color: var(--input-bg)">${item.vision}</span>
                         </div>
                         <h3 style="font-size:1.2rem; margin:10px 0 5px 0; color: var(--primary-color);">${item.name}</h3>
-        
-                        <div class="talent-box">
-                            <div class="talent-name">🌟 Constellation Niv.1 : ${item.c1 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.c1Desc || 'Aucune description disponible.'}</p>
-                        </div>
-        
-                        <div class="talent-box">
-                            <div class="talent-name">🌟 Constellation Niv.2 : ${item.c2 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.c2Desc || 'Aucune description disponible.'}</p>
-                        </div>
-        
-                        <div class="talent-box">
-                            <div class="talent-name">🌟 Constellation Niv.3 : ${item.c3 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.c3Desc || 'Aucune description disponible.'}</p>
-                        </div>
-
-                        <div class="talent-box">
-                            <div class="talent-name">🌟 Constellation Niv.4 : ${item.c4 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.c4Desc || 'Aucune description disponible.'}</p>
-                        </div>
-
-                        <div class="talent-box">
-                            <div class="talent-name">🌟 Constellation Niv.5 : ${item.c5 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.c5Desc || 'Aucune description disponible.'}</p>
-                        </div>
-        
-                        <div class="talent-box">
-                            <div class="talent-name">🌟 Constellation Niv.6 : ${item.c6 || 'Non renseigné'}</div>
-                            <p class="talent-desc">${item.c6Desc || 'Aucune description disponible.'}</p>
-                        </div>
                     `;
+                    
+                    if (item.c1) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">🌟 Constellation Niv.1 : ${item.c1}</div>
+                                <p class="talent-desc">${item.c1desc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+                    
+                    if (item.c2) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">🌟 Constellation Niv.2 : ${item.c2}</div>
+                                <p class="talent-desc">${item.c2Desc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+                    
+                    if (item.c3) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">🌟 Constellation Niv.3 : ${item.c3}</div>
+                                <p class="talent-desc">${item.c3Desc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+
+                    if (item.c4) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">🌟 Constellation Niv.4 : ${item.c4}</div>
+                                <p class="talent-desc">${item.c4Desc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+
+                    if (item.c5) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">🌟 Constellation Niv.5 : ${item.c5}</div>
+                                <p class="talent-desc">${item.c5Desc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+                    
+                    if (item.c6) {
+                        cardHTML += `
+                            <div class="talent-box">
+                                <div class="talent-name">🌟 Constellation Niv.6 : ${item.c6}</div>
+                                <p class="talent-desc">${item.c6Desc || 'Aucune description disponible.'}</p>
+                            </div>
+                        `;
+                    }
+
+                    card.innerHTML = cardHTML;
                     // Permet d'ouvrir la modale globale au clic
                     card.addEventListener('click', () => openDetails(item, 'characters'));
                 }
@@ -522,7 +584,7 @@
                         <div><strong>Anniversaire :</strong> ${item.anniversaire || 'Inconnu'}</div>
                     </div>
                 `;
-            } else if (type === 'weapons') {
+            } else if (type === ' weapons') {
                 htmlContent = `
                     <div class="modal-header">
                         <img src="${item.icon}" class="modal-img">
@@ -541,7 +603,6 @@
                         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;" class="weapon-effect-box">
                         <div class="talent-name">${item.name || 'Non renseigné'}</div>
                         <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
-                        <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                     </div>
 
                 `;
@@ -564,6 +625,7 @@
                         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;" class="weapon-effect-box">
                         <div class="talent-name">${item.names || 'Non renseigné'}</div>
                         <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
+                        <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                     </div>
 
                 `;
