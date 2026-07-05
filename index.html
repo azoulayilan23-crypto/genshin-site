@@ -529,7 +529,6 @@
                         <div class="modal-title">
                             <h2>${item.name}</h2>
                             <p>${'★'.repeat(item.rarity)}</p> | Catégorie : <strong>${item.type}</strong></p> | Statistique principale : <strong>${item.main}</strong></p> | Statistique secondaire : <strong>${item.sub}</strong></p>
-                            <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                         </div>
                     </div>
                     <div class="section-title">📊 Propriétés Légendaires</div>
@@ -542,6 +541,7 @@
                         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;" class="weapon-effect-box">
                         <div class="talent-name">${item.name || 'Non renseigné'}</div>
                         <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
+                        <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                     </div>
 
                 `;
