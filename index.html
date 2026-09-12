@@ -239,7 +239,6 @@
         <p>Base de données Intégrale - Mode Local Autonome</p>
     </header>
 
-    <!-- Ajout de l'onglet Talents ici -->
     <div class="tabs-container">
         <button class="tab-btn active" data-tab="characters">👤 Personnages</button>
         <button class="tab-btn" data-tab="weapons">⚔️ Armes</button>
@@ -262,7 +261,6 @@
             <button class="filter-btn" data-rarity="3" id="btnRarity3" style="display: none">3 Étoiles ★★★</button>
         </div>
 
-        <!-- Filtres Éléments (valables pour Personnages ET Talents) -->
         <div class="filter-buttons" id="elementFilters">
             <span class="filter-label">Élément :</span>
             <button class="filter-btn active" data-element="all">Tous</button>
@@ -275,7 +273,6 @@
             <button class="filter-btn" data-element="Géo">Géo</button>
         </div>
 
-        <!-- Filtres Types d'armes (uniquement pour Armes) -->
         <div class="filter-buttons" id="weaponTypeFilters" style="display: none;">
             <span class="filter-label">Type d'arme :</span>
             <button class="filter-btn active" data-weapon-type="all">Tous</button>
@@ -286,7 +283,6 @@
             <button class="filter-btn" data-weapon-type="Catalyseur">Catalyseur</button>
         </div>
 
-        <!-- Filtres D'artéfact (uniquement pour les Artéfacts) -->
         <div class="filter-buttons" id="ArtifactFilter" style="display: none;">
         </div>
     </div>
@@ -302,7 +298,7 @@
 
     <script src="data.js"></script>
     <script>
-        let currentTab = 'characters'; // 'characters', 'weapons', ou 'talents'
+        let currentTab = 'characters';
         let currentElementFilter = 'all';
         let currentWeaponTypeFilter = 'all';
         let currentRarityFilter = 'all'; 
@@ -310,66 +306,74 @@
         let currentSearchQuery = '';
         let alphaDirection = 'asc'; 
 
+        function getCharacterElement(item) {
+            return item.Divin || item.Gnosis || item.Lunaire || item.Stellaire || item.Serpent || item.Trilunaire;
+        }
+
         function render() {
             const grid = document.getElementById('mainGrid');
             grid.innerHTML = '';
 
-            // Ajustement de la largeur de la grille si on est sur l'onglet talents
             if (currentTab === 'talents' || currentTab === 'constellation') {
                 grid.classList.add('talents-view');
             } else {
                 grid.classList.remove('talents-view');
             }
 
-            // Pour l'onglet "talents", on utilise aussi la liste des personnages
             let dataSource = (currentTab === 'talents' || currentTab === 'constellation') ? 'characters' : currentTab;
             let filtered = [...LOCAL_GENSHIN_DATA[dataSource]];
 
-            // 1. Filtrage Recherche textuelle
             if (currentSearchQuery) {
-                filtered = filtered.filter(item => item.name.toLowerCase().includes(currentSearchQuery.toLowerCase()));
+                filtered = filtered.filter(item => item.name && item.name.toLowerCase().includes(currentSearchQuery.toLowerCase()));
             }
 
-            // 2. Filtrage par Rareté
             if (currentRarityFilter !== 'all') {
                 filtered = filtered.filter(item => item.rarity === parseInt(currentRarityFilter));
             }
 
-            // 3. Filtrage par Élément (Personnages et Talents)
-            if ((currentTab === 'characters' || currentTab === 'talents') && currentElementFilter !== 'all') {
-                filtered = filtered.filter(char => char.vision === currentElementFilter);
+            if ((currentTab === 'characters' || currentTab === 'talents' || currentTab === 'constellation') && currentElementFilter !== 'all') {
+                filtered = filtered.filter(char => {
+                    return getCharacterElement(char) === currentElementFilter;
+                });
             }
 
-            // 4. Filtrage par Type d'Arme (Armes)
             if (currentTab === 'weapons' && currentWeaponTypeFilter !== 'all') {
                 filtered = filtered.filter(weapon => weapon.type === currentWeaponTypeFilter);
             }
 
-            // 4. Filtrage par Artéfact (Artéfacts)
             if (currentTab === 'artifacts' && currentArtifactFilter !== 'all') {
                 filtered = filtered.filter(artifact => artifact.type === currentArtifactFilter);
             }
 
-            // 6. Tri Alphabétique
             filtered.sort((a, b) => {
-                return alphaDirection === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+                const nameA = a.name || '';
+                const nameB = b.name || '';
+                return alphaDirection === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
             });
 
-            // Affichage des cartes
             filtered.forEach(item => {
                 const card = document.createElement('div');
-                card.className = `card stars-${item.rarity}`;
+                card.className = `card stars-${item.rarity || 3}`;
 
                 if (currentTab === 'characters') {
+                    // Sécurité : si le personnage n'a pas de nom valide, on masque la carte
+                    if (!item.name || item.name === 'Non renseigné') {
+                        card.style.display = 'none';
+                        return;
+                    } else {
+                        card.style.display = 'block';
+                    }
+                    
+                    const elementValue = getCharacterElement(item);
                     card.innerHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
-                            <span class="badge" style="background-color: var(--input-bg)">${item.vision}</span>
+                            <span class="badge" style="background-color: var(--input-bg)">${elementValue || ''}</span>
                         </div>
                         <h3 style="font-size:1.1rem; margin:10px 0 5px 0;">${item.name}</h3>
                         <div class="details">
-                            <p style="margin:0; color:#aaa; font-size:0.9rem;">${item.weapon}</p>
-                            <p style="margin:5px 0 0 0; color: var(--rarity-5);">${'★'.repeat(item.rarity)}</p>
+                            <p style="margin:0; color:#aaa; font-size:0.9rem;">${item.weapon || ''}</p>
+                            <p style="margin:5px 0 0 0; color: var(--rarity-5);">${item.rarity ? '★'.repeat(item.rarity) : ''}</p>
                         </div>
                     `;
                     card.addEventListener('click', () => openDetails(item, 'characters'));
@@ -387,25 +391,23 @@
                     `;
                     card.addEventListener('click', () => openDetails(item, 'weapons'));
                 } 
-                // --- NOUVEL ONGLET : AFFICHAGE DES TALENTS ET ATTACKS ---
                 else if (currentTab === 'talents') {
-                    // CONDITION MAGIQUE : On vérifie si TOUS les talents importants sont vides ou non renseignés
                     const hasTalents = (item.normale && item.normale !== 'Non renseigné') || 
                                        (item.compétence && item.compétence !== 'Non renseigné') || 
                                        (item.ultime && item.ultime !== 'Non renseigné');
                     
-                    // Si le personnage n'a aucun talent renseigné, on masque sa carte et on passe au suivant
                     if (!hasTalents) {
                         card.style.display = 'none';
                         return; 
                     } else {
-                        card.style.display = 'block'; // On s'assure qu'elle s'affiche s'il y a du contenu
+                        card.style.display = 'block';
                     }
 
+                    const elementValue = getCharacterElement(item);
                     let cardHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
-                            <span class="badge" style="background-color: var(--input-bg)">${item.vision}</span>
+                            <span class="badge" style="background-color: var(--input-bg)">${elementValue || ''}</span>
                         </div>
                         <h3 style="font-size:1.2rem; margin:10px 0 5px 0; color: var(--primary-color);">${item.name}</h3>
                     `;
@@ -487,10 +489,8 @@
                 }
 
                 else if (currentTab === 'constellation') {
-                    // CONDITION MAGIQUE : On vérifie si la constellation C1 est vide ou "Non renseigné"
                     const hasConstellations = item.c1 && item.c1 !== 'Non renseigné';
                     
-                    // Si pas de constellation, on fait disparaître complètement la carte
                     if (!hasConstellations) {
                         card.style.display = 'none';
                         return;
@@ -498,10 +498,11 @@
                         card.style.display = 'block';
                     }
 
+                    const elementValue = getCharacterElement(item);
                     let cardHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
-                            <span class="badge" style="background-color: var(--input-bg)">${item.vision}</span>
+                            <span class="badge" style="background-color: var(--input-bg)">${elementValue || ''}</span>
                         </div>
                         <h3 style="font-size:1.2rem; margin:10px 0 5px 0; color: var(--primary-color);">${item.name}</h3>
                     `;
@@ -565,7 +566,7 @@
                 }
 
                 else if (currentTab === 'artifacts') {
-                    card.style.display = 'block'; // On s'assure que les artefacts s'affichent toujours normalement
+                    card.style.display = 'block';
                     card.innerHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
@@ -588,12 +589,13 @@
             let htmlContent = '';
 
             if (type === 'characters') {
+                const elementValue = getCharacterElement(item);
                 htmlContent = `
                     <div class="modal-header">
                         <img src="${item.icon}" class="modal-img">
                         <div class="modal-title">
                             <h2>${item.name}</h2>
-                            <p>${'★'.repeat(item.rarity)}</p> Élément : <strong>${item.vision}</strong> | Arme : <strong>${item.weapon}</strong> | Élévation : <strong>${item.elevation}</strong></p>
+                            <p>${'★'.repeat(item.rarity)} </p> Élément : <strong>${elementValue}</strong> | Arme : <strong>${item.weapon}</strong> | Élévation : <strong>${item.elevation}</strong></p>
                             <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                         </div>
                     </div>
@@ -611,7 +613,7 @@
                         <img src="${item.icon}" class="modal-img">
                         <div class="modal-title">
                             <h2>${item.name}</h2>
-                            <p>${'★'.repeat(item.rarity)}</p> Catégorie : <strong>${item.type}</strong> | Statistique principale : <strong>${item.main}</strong> | Statistique secondaire : <strong>${item.sub}</strong></p>
+                            <p>${'★'.repeat(item.rarity)} Catégorie : <strong>${item.type}</strong> | Statistique principale : <strong>${item.main}</strong> | Statistique secondaire : <strong>${item.sub}</strong></p>
                         </div>
                     </div>
                     <div class="section-title">📊 Propriétés Légendaires</div>
@@ -622,10 +624,10 @@
                     <div class="section-title">📊 Description</div>
                     <div class="substat-grid">
                         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;" class="weapon-effect-box">
-                        <div class="talent-name">${item.name || 'Non renseigné'}</div>
-                        <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
+                            <div class="talent-name">${item.name || 'Non renseigné'}</div>
+                            <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
+                        </div>
                     </div>
-
                 `;
             } else {
                 htmlContent = `
@@ -633,7 +635,7 @@
                         <img src="${item.icon}" class="modal-img">
                         <div class="modal-title">
                             <h2>${item.name}</h2>
-                            <p>${'★'.repeat(item.rarity)}</p> Catégorie : <strong>${item.type}</strong></p>
+                            <p>${'★'.repeat(item.rarity)} Catégorie : <strong>${item.type}</strong></p>
                         </div>
                     </div>
                     <div class="section-title">📊 Propriétés Légendaires</div>
@@ -644,11 +646,11 @@
                     <div class="section-title">📊 Description</div>
                     <div class="substat-grid">
                         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;" class="weapon-effect-box">
-                        <div class="talent-name">${item.names || 'Non renseigné'}</div>
-                        <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
-                        <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
+                            <div class="talent-name">${item.names || 'Non renseigné'}</div>
+                            <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
+                            <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
+                        </div>
                     </div>
-
                 `;
             }
 
@@ -682,25 +684,22 @@
                     e.target.classList.add('active');
                     currentTab = e.target.getAttribute('data-tab');
                     
-                    // Ajustement des barres de filtres selon l'onglet
                     if (currentTab === 'characters' || currentTab === 'talents' || currentTab === 'constellation') {
                         document.getElementById('elementFilters').style.display = 'flex';
                         document.getElementById('weaponTypeFilters').style.display = 'none';
-                        document.getElementById('ArtifactFilter').style.dispay = 'none';    
-                    }else if (currentTab === 'weapons') {
+                        document.getElementById('ArtifactFilter').style.display = 'none';    
+                    } else if (currentTab === 'weapons') {
                         document.getElementById('elementFilters').style.display = 'none';
                         document.getElementById('weaponTypeFilters').style.display = 'flex';
-                        document.getElementById('ArtifactFilter').style.dispay = 'none';
-
-                    }else if (currentTab === 'artifacts') {
+                        document.getElementById('ArtifactFilter').style.display = 'none';
+                    } else if (currentTab === 'artifacts') {
                         document.getElementById('elementFilters').style.display = 'none';
                         document.getElementById('weaponTypeFilters').style.display = 'none';
-                        document.getElementById('ArtifactFilter').style.dispay = 'flex';
-
-                    }else {
+                        document.getElementById('ArtifactFilter').style.display = 'flex';
+                    } else {
                         document.getElementById('elementFilters').style.display = 'none';
                         document.getElementById('weaponTypeFilters').style.display = 'none';
-                        document.getElementById('ArtifactFilter').style.dispay = 'none';
+                        document.getElementById('ArtifactFilter').style.display = 'none';
                     }                    
 
                     if (currentTab === 'weapons') {
