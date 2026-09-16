@@ -284,6 +284,13 @@
         </div>
 
         <div class="filter-buttons" id="ArtifactFilter" style="display: none;">
+            <span class="filter-label">Type d'artéfact :</span>
+            <button class="filter-btn active" data-artifact-type="all">Tous</button>
+            <button class="filter-btn" data-artifact-type="Fleur de la vie">Fleur de la vie</button>
+            <button class="filter-btn" data-artifact-type="Plume de la mort">Plume de la mort</button>
+            <button class="filter-btn" data-artifact-type="Sables du temps">Sables du temps</button>
+            <button class="filter-btn" data-artifact-type="Coupe d'éonothème">Coupe d'éonothème</button>
+            <button class="filter-btn" data-artifact-type="Diadème de Logos">Diadème de logos</button>
         </div>
     </div>
 
@@ -566,7 +573,14 @@
                 }
 
                 else if (currentTab === 'artifacts') {
-                    card.style.display = 'block';
+                    // Sécurité : si l'artéfact n'a pas de nom valide, on masque la carte
+                    if (!item.name || item.name === 'Non renseigné') {
+                        card.style.display = 'none';
+                        return;
+                    } else {
+                        card.style.display = 'block';
+                    }
+
                     card.innerHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
@@ -613,7 +627,7 @@
                         <img src="${item.icon}" class="modal-img">
                         <div class="modal-title">
                             <h2>${item.name}</h2>
-                            <p>${'★'.repeat(item.rarity)} Catégorie : <strong>${item.type}</strong> | Statistique principale : <strong>${item.main}</strong> | Statistique secondaire : <strong>${item.sub}</strong></p>
+                            <p>${'★'.repeat(item.rarity)} </p> Catégorie : <strong>${item.type}</strong> | Statistique principale : <strong>${item.main}</strong> | Statistique secondaire : <strong>${item.sub}</strong></p>
                         </div>
                     </div>
                     <div class="section-title">📊 Propriétés Légendaires</div>
@@ -635,7 +649,7 @@
                         <img src="${item.icon}" class="modal-img">
                         <div class="modal-title">
                             <h2>${item.name}</h2>
-                            <p>${'★'.repeat(item.rarity)} Catégorie : <strong>${item.type}</strong></p>
+                            <p>${'★'.repeat(item.rarity)} </p> Catégorie : <strong>${item.type}</strong></p>
                         </div>
                     </div>
                     <div class="section-title">📊 Propriétés Légendaires</div>
@@ -646,7 +660,7 @@
                     <div class="section-title">📊 Description</div>
                     <div class="substat-grid">
                         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;" class="weapon-effect-box">
-                            <div class="talent-name">${item.names || 'Non renseigné'}</div>
+                            <div class="talent-name">${item.set || 'Non renseigné'}</div>
                             <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
                             <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                         </div>
@@ -669,6 +683,7 @@
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 if (btn.getAttribute('data-element') === 'all' || 
                     btn.getAttribute('data-weapon-type') === 'all' || 
+                    btn.getAttribute('data-artifact-type') === 'all' || 
                     btn.getAttribute('data-rarity') === 'all') {
                     btn.classList.add('active');
                 } else {
@@ -756,6 +771,7 @@
                 btn.addEventListener('click', (e) => {
                     document.querySelectorAll('#ArtifactFilter .filter-btn').forEach(b => b.classList.remove('active'));
                     e.target.classList.add('active');
+                    currentArtifactFilter = e.target.getAttribute('data-artifact-type');
                     render();
                 });
             });
