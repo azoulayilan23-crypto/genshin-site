@@ -113,7 +113,6 @@
             margin: 0 auto;
         }
 
-        /* Vue talents : cartes plus larges pour lire les descriptions */
         .item-grid.talents-view {
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
         }
@@ -160,7 +159,6 @@
             font-size: 11px;
         }
 
-        /* Styles spécifiques pour l'affichage des attaques */
         .talent-box {
             background: #12131a;
             margin: 10px 15px;
@@ -182,7 +180,6 @@
             line-height: 1.3;
         }
 
-        /* --- MODALE --- */
         .modal {
             display: none;
             position: fixed;
@@ -241,7 +238,7 @@
 
     <div class="tabs-container">
         <button class="tab-btn active" data-tab="characters">👤 Personnages</button>
-        <button class="tab-btn" data-tab="weapons">⚔️ Armes</button>
+        <button class="tab-btn" data-tab="weapons">⚔️️ Armes</button>
         <button class="tab-btn" data-tab="talents">✨ Aptitudes</button>
         <button class="tab-btn" data-tab="constellation">✨ Constellation</button>
         <button class="tab-btn" data-tab="artifacts">🧰 Artéfacts</button>
@@ -314,7 +311,7 @@
         let alphaDirection = 'asc'; 
 
         function getCharacterElement(item) {
-            return item.Divin || item.Gnosis || item.Lunaire || item.Stellaire || item.Serpent || item.Trilunaire || item.Autorité;
+            return item.divin || item.gnosis || item.lunaire || item.stellaire || item.serpent || item.trilunaire || item.autorité;
         }
 
         function render() {
@@ -363,7 +360,6 @@
                 card.className = `card stars-${item.rarity || 3}`;
 
                 if (currentTab === 'characters') {
-                    // Sécurité : si le personnage n'a pas de nom valide, on masque la carte
                     if (!item.name || item.name === 'Non renseigné') {
                         card.style.display = 'none';
                         return;
@@ -386,6 +382,13 @@
                     card.addEventListener('click', () => openDetails(item, 'characters'));
                 } 
                 else if (currentTab === 'weapons') {
+                    if (!item.name || item.name === 'Non renseigné') {
+                        card.style.display = 'none';
+                        return;
+                    } else {
+                        card.style.display = 'block';
+                    }
+
                     card.innerHTML = `
                         <div class="media-container">
                             <img src="${item.icon}" class="item-thumb" alt="${item.name}">
@@ -573,7 +576,6 @@
                 }
 
                 else if (currentTab === 'artifacts') {
-                    // Sécurité : si l'artéfact n'a pas de nom valide, on masque la carte
                     if (!item.name || item.name === 'Non renseigné') {
                         card.style.display = 'none';
                         return;
@@ -633,13 +635,14 @@
                     <div class="section-title">📊 Propriétés Légendaires</div>
                     <div class="substat-grid">
                         <div><strong>Rareté :</strong> ${item.rarity} Étoiles</div>
-                        <div><strong>Disponibilité :</strong> ${item.location || 'Inconnue'}</div>
+                        <div><strong>Disponibilité :</strong> ${item.obtention || 'Inconnue'}</div>
                     </div>
                     <div class="section-title">📊 Description</div>
                     <div class="substat-grid">
                         <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;" class="weapon-effect-box">
-                            <div class="talent-name">${item.name || 'Non renseigné'}</div>
+                            <div class="talent-name">${item.names || 'Non renseigné'}</div>
                             <p class="talent-desc">${item.effect || 'Aucune description disponible.'}</p>
+                            <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                         </div>
                     </div>
                 `;
@@ -655,7 +658,7 @@
                     <div class="section-title">📊 Propriétés Légendaires</div>
                     <div class="substat-grid">
                         <div><strong>Rareté :</strong> ${item.rarity} Étoiles</div>
-                        <div><strong>Disponibilité :</strong> ${item.location || 'Inconnue'}</div>
+                        <div><strong>Disponibilité :</strong> ${item.obtention || 'Inconnue'}</div>
                     </div>
                     <div class="section-title">📊 Description</div>
                     <div class="substat-grid">
