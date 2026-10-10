@@ -307,7 +307,7 @@ function openDetails(item, type) {
                 <img src="${item.icon}" class="modal-img">
                 <div class="modal-title">
                     <h2>${item.name}</h2>
-                    <p>${'★'.repeat(item.rarity)} | Élément : <strong>${elementValue}</strong> | Arme : <strong>${item.weapon}</strong> | Élévation : <strong>${item.elevation}</strong></p>
+                    <p>${'★'.repeat(item.rarity)} <br> Élément : <strong>${elementValue}</strong> | Arme : <strong>${item.weapon}</strong> | Élévation : <strong>${item.elevation}</strong></p>
                     <p style="font-style: italic; color: #aaa;">"${item.description || ''}"</p>
                 </div>
             </div>
@@ -325,7 +325,7 @@ function openDetails(item, type) {
                 <img src="${item.icon}" class="modal-img">
                 <div class="modal-title">
                     <h2>${item.name}</h2>
-                    <p>${'★'.repeat(item.rarity)} | Catégorie : <strong>${item.type}</strong> | Stat. principale : <strong>${item.main}</strong> | Stat. secondaire : <strong>${item.sub}</strong></p>
+                    <p>${'★'.repeat(item.rarity)} <br> Catégorie : <strong>${item.type}</strong> | Stat. principale : <strong>${item.main}</strong> | Stat. secondaire : <strong>${item.sub}</strong></p>
                 </div>
             </div>
             <div class="section-title">📊 Propriétés Légendaires</div>
@@ -348,7 +348,7 @@ function openDetails(item, type) {
                 <img src="${item.icon}" class="modal-img">
                 <div class="modal-title">
                     <h2>${item.name}</h2>
-                    <p>${'★'.repeat(item.rarity)} | Catégorie : <strong>${item.type}</strong></p>
+                    <p>${'★'.repeat(item.rarity)} <br> Catégorie : <strong>${item.type}</strong></p>
                 </div>
             </div>
             <div class="section-title">📊 Propriétés Légendaires</div>
