@@ -3,73 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Archives de Teyvat - Mode Local Autonome</title>
+    <title>Archives de Teyvat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <header>
-        <h1>Archives de Teyvat</h1>
-        <p>Base de données Intégrale - Mode Local Autonome</p>
-    </header>
-
-    <div class="tabs-container">
-        <button class="tab-btn active" data-tab="characters">👤 Personnages</button>
-        <button class="tab-btn" data-tab="weapons">⚔ Armes</button>
-        <button class="tab-btn" data-tab="talents">✨ Aptitudes</button>
-        <button class="tab-btn" data-tab="constellation">✨ Constellation</button>
-        <button class="tab-btn" data-tab="artifacts">🧰 Artéfacts</button>
-    </div>
-
-    <div class="controls-container">
-        <div class="search-row">
-            <input type="text" id="searchBox" class="search-box" placeholder="Rechercher par nom...">
-            <button class="sort-btn" id="sortAlphaBtn">Tri : A-Z</button>
-        </div>
+    <!-- Barre latérale gauche (Titre complet + Menu vertical) -->
+    <div class="sidebar">
+        <header>
+            <h1>Archive de Teyvat</h1>
+        </header>
         
-        <div class="filter-buttons" id="rarityFilters">
-            <span class="filter-label">Rareté :</span>
-            <button class="filter-btn active" data-rarity="all">Toutes</button>
-            <button class="filter-btn" data-rarity="5">5 Étoiles ★★★★★</button>
-            <button class="filter-btn" data-rarity="4">4 Étoiles ★★★★</button>
-            <button class="filter-btn" data-rarity="3" id="btnRarity3" style="display: none">3 Étoiles ★★★</button>
-        </div>
-
-        <div class="filter-buttons" id="elementFilters">
-            <span class="filter-label">Élément :</span>
-            <button class="filter-btn active" data-element="all">Tous</button>
-            <button class="filter-btn" data-element="Pyro">Pyro</button>
-            <button class="filter-btn" data-element="Hydro">Hydro</button>
-            <button class="filter-btn" data-element="Anémo">Anémo</button>
-            <button class="filter-btn" data-element="Électro">Électro</button>
-            <button class="filter-btn" data-element="Dendro">Dendro</button>
-            <button class="filter-btn" data-element="Cryo">Cryo</button>
-            <button class="filter-btn" data-element="Géo">Géo</button>
-        </div>
-
-        <div class="filter-buttons" id="weaponTypeFilters" style="display: none;">
-            <span class="filter-label">Type d'arme :</span>
-            <button class="filter-btn active" data-weapon-type="all">Tous</button>
-            <button class="filter-btn" data-weapon-type="Épée à une main">Épée à une main</button>
-            <button class="filter-btn" data-weapon-type="Épée à deux mains">Épée à deux mains</button>
-            <button class="filter-btn" data-weapon-type="Arme d'hast">Arme d'hast</button>
-            <button class="filter-btn" data-weapon-type="Arc">Arc</button>
-            <button class="filter-btn" data-weapon-type="Catalyseur">Catalyseur</button>
-        </div>
-
-        <div class="filter-buttons" id="ArtifactFilter" style="display: none;">
-            <span class="filter-label">Type d'artéfact :</span>
-            <button class="filter-btn active" data-artifact-type="all">Tous</button>
-            <button class="filter-btn" data-artifact-type="Fleur de la vie">Fleur de la vie</button>
-            <button class="filter-btn" data-artifact-type="Plume de la mort">Plume de la mort</button>
-            <button class="filter-btn" data-artifact-type="Sables du temps">Sables du temps</button>
-            <button class="filter-btn" data-artifact-type="Coupe d'éonothème">Coupe d'éonothème</button>
-            <button class="filter-btn" data-artifact-type="Diadème de Logos">Diadème de logos</button>
+        <div class="tabs-container">
+            <button class="tab-btn active" data-tab="characters">👤 Personnages</button>
+            <button class="tab-btn" data-tab="weapons">⚔️ Armes</button>
+            <button class="tab-btn" data-tab="talents">✨ Aptitudes</button>
+            <button class="tab-btn" data-tab="constellations">✨ Constellation</button>
+            <button class="tab-btn" data-tab="artifacts">🧰 Artéfacts</button>
+            <button class="tab-btn" data-tab="admin">⚙️ Admin</button>
         </div>
     </div>
 
-    <main class="item-grid" id="mainGrid"></main>
+    <!-- Contenu principal à droite -->
+    <div class="main-content">
+        <!-- Barre de recherche et filtres -->
+        <div class="controls-container" id="controlsContainer">
+            <div class="search-row">
+                <input type="text" class="search-box" id="searchBox" placeholder="Rechercher...">
+                <button class="sort-btn" id="sortAlphaBtn">Tri : A-Z</button>
+            </div>
+            
+            <!-- Filtres par rareté -->
+            <div class="filter-buttons" id="rarityFilters">
+                <span class="filter-label">Rareté :</span>
+                <button class="filter-btn active" data-rarity="all">Tous</button>
+                <button class="filter-btn" data-rarity="5">★★★★★</button>
+                <button class="filter-btn" data-rarity="4">★★★★</button>
+                <button class="filter-btn" id="btnRarity3" data-rarity="3" style="display: none;">★★★</button>
+            </div>
 
+            <!-- Filtres par élément (Personnages/Aptitudes/Constellations) -->
+            <div class="filter-buttons" id="elementFilters">
+                <span class="filter-label">Élément :</span>
+                <button class="filter-btn active" data-element="all">Tous</button>
+                <button class="filter-btn" data-element="Pyro">Pyro</button>
+                <button class="filter-btn" data-element="Hydro">Hydro</button>
+                <button class="filter-btn" data-element="Anémo">Anémo</button>
+                <button class="filter-btn" data-element="Électro">Électro</button>
+                <button class="filter-btn" data-element="Dendro">Dendro</button>
+                <button class="filter-btn" data-element="Cryo">Cryo</button>
+                <button class="filter-btn" data-element="Géo">Géo</button>
+            </div>
+
+            <!-- Filtres par type d'arme -->
+            <div class="filter-buttons" id="weaponTypeFilters">
+                <span class="filter-label">Type :</span>
+                <button class="filter-btn active" data-weapon-type="all">Tous</button>
+                <button class="filter-btn" data-weapon-type="Épée à une main">Épée à une main</button>
+                <button class="filter-btn" data-weapon-type="Épée à deux mains">Épée à deux mains</button>
+                <button class="filter-btn" data-weapon-type="Arme d'hast">Arme d'hast</button>
+                <button class="filter-btn" data-weapon-type="Arc">Arc</button>
+                <button class="filter-btn" data-weapon-type="Catalyseur">Catalyseur</button>
+            </div>
+
+            <!-- Filtres par artéfacts -->
+            <div class="filter-buttons" id="ArtifactFilter" style="display: none;">
+                <span class="filter-label">Type d'artéfact :</span>
+                <button class="filter-btn active" data-artifact-type="all">Tous</button>
+                <button class="filter-btn" data-artifact-type="Fleur de la vie">Fleur de la vie</button>
+                <button class="filter-btn" data-artifact-type="Plume de la mort">Plume de la mort</button>
+                <button class="filter-btn" data-artifact-type="Sables du temps">Sables du temps</button>
+                <button class="filter-btn" data-artifact-type="Coupe d'éonothème">Coupe d'éonothème</button>
+                <button class="filter-btn" data-artifact-type="Diadème de Logos">Diadème de logos</button>
+            </div>
+        </div>
+
+        <!-- Grille principale des cartes (ID remis à mainGrid pour app.js) -->
+        <div class="item-grid" id="mainGrid"></div>
+    </div>
+
+    <!-- Modale de détails -->
     <div class="modal" id="detailsModal">
         <div class="modal-content">
             <span class="close-modal" id="closeModal">&times;</span>
