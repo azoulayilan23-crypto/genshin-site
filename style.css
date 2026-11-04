@@ -316,3 +316,15 @@ h1 { color: var(--primary-color); margin-bottom: 5px; }
 .admin-panel-head h2 { flex: 1 1 auto; }
 .admin-check { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 0.9rem; cursor: pointer; }
 .admin-panel .admin-check input { width: auto; }
+
+/* --- Admin : modifier un élément existant --- */
+.admin-mode-switch { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.admin-mode-btn { padding: 8px 18px; border-radius: 8px; border: 2px solid transparent; background: var(--card-bg); color: var(--text-color); font-weight: bold; font-size: 0.95rem; cursor: pointer; outline: 1px solid #3d4263; }
+.admin-mode-btn.active { border-color: var(--rarity-5); outline-color: transparent; }
+.edit-picker { margin-bottom: 20px; }
+.edit-picker label { display: block; font-weight: bold; margin-bottom: 8px; }
+.edit-results { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; margin-top: 10px; }
+.edit-result { text-align: left; padding: 10px 14px; background: var(--input-bg); border: 1px solid #3d4263; border-radius: 8px; color: var(--text-color); cursor: pointer; font-size: 0.95rem; }
+.edit-result:hover { border-color: var(--primary-color); }
+.edit-result small { color: #8a8f98; margin-left: 8px; }
+.edit-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: rgba(74, 144, 226, 0.12); border: 1px solid var(--primary-color); border-radius: 8px; padding: 10px 14px; }

@@ -22,6 +22,23 @@ const HAS_SOURCE = typeof LOCAL_GENSHIN_SOURCE === 'function';
 let sourceBaseText = HAS_SOURCE ? LOCAL_GENSHIN_SOURCE.toString() : '';
 
 const customItems = { characters: [], weapons: [], artifacts: [] };
+
+// Modifications en attente d'éléments DÉJÀ présents dans data.js : { originalKey, item }
+const CUSTOM_EDITS_KEY = 'genshin_custom_edits';
+const customEdits = { characters: [], weapons: [], artifacts: [] };
+
+// Deux éléments identiques (l'ordre des clés n'a pas d'importance)
+function sameItem(a, b) {
+    const norm = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]]));
+    return norm(a) === norm(b);
+}
+
+function saveCustomEdits() {
+    try {
+        if (Object.values(customEdits).some(list => list.length)) localStorage.setItem(CUSTOM_EDITS_KEY, JSON.stringify(customEdits));
+        else localStorage.removeItem(CUSTOM_EDITS_KEY);
+    } catch (e) {}
+}
 if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
     Object.keys(CUSTOM_STORAGE_KEYS).forEach(category => {
         if (!LOCAL_GENSHIN_DATA[category]) return;
@@ -37,6 +54,20 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
         }
         customItems[category] = pending;
     });
+    if (HAS_SOURCE) {
+        // Modifications en attente : on retire celles que data.js contient déjà
+        let savedEdits = {};
+        try { savedEdits = JSON.parse(localStorage.getItem(CUSTOM_EDITS_KEY)) || {}; } catch (e) {}
+        Object.keys(customEdits).forEach(category => {
+            const baseMap = new Map((LOCAL_GENSHIN_DATA[category] || []).map(item => [itemKey(category, item), item]));
+            customEdits[category] = (savedEdits[category] || []).filter(edit => {
+                if (!edit || !edit.item || !edit.item.name) return false;
+                const current = baseMap.get(itemKey(category, edit.item));
+                return !(current && sameItem(current, edit.item));
+            });
+        });
+        saveCustomEdits();
+    }
     if (!rebuildDataFromSource()) {
         // Ancien format de data.js (sans marqueurs) : ajout en fin de liste
         Object.keys(customItems).forEach(category => {
@@ -49,7 +80,7 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
 // Pour l'activer, ouvrez le site une fois avec  ?admin=VOTRE_CODE  (ex : https://monsite.github.io/?admin=changez-moi).
 // ⚠️ Ce n'est PAS une sécurité (le code est lisible dans ce fichier) : cela masque simplement le bouton aux visiteurs.
 // Un visiteur ne peut de toute façon rien modifier pour les autres : le site est statique et il n'a aucun accès à votre GitHub.
-const ADMIN_SECRET_CODE = 'MVTMJSUN';   // ← remplacez par votre propre code
+const ADMIN_SECRET_CODE = 'changez-moi';   // ← remplacez par votre propre code
 const ADMIN_FLAG_KEY = 'genshin_admin';
 
 function isAdminMode() {
@@ -229,8 +260,68 @@ function findMarkerComment(text, category, item) {
 }
 
 // Texte de data.js d'origine + tous les ajouts en attente, chacun inséré à son marqueur
+// Ligne d'un élément (repéré par sa clé d'identité) dans le tableau d'une catégorie
+function findItemLine(lines, category, key) {
+    const start = lines.findIndex(l => new RegExp(`^\\s*${category}\\s*:\\s*\\[`).test(l));
+    if (start === -1) return null;
+    const wantedName = key.split('|')[0];
+    for (let i = start + 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (/^\s*\]\s*,?\s*$/.test(line)) break;
+        const m = line.match(/^(\s*)(\{.*\})(\s*,?)((?:\s*\/\/.*)?)\s*$/);
+        if (!m) continue;
+        const nameMatch = m[2].match(/^\{\s*name:\s*("(?:[^"\\]|\\.)*")/);
+        if (!nameMatch) continue;
+        let name;
+        try { name = new Function('return ' + nameMatch[1])(); } catch (e) { continue; }
+        if (String(name).trim().toLowerCase() !== wantedName) continue;
+        let item;
+        try { item = new Function('return (' + m[2] + ');')(); } catch (e) { continue; }
+        if (itemKey(category, item) === key) return { index: i, indent: m[1], comment: m[4] || '', item };
+    }
+    return null;
+}
+
+// Remplace la ligne d'un élément en gardant sa place, son indentation et son éventuel commentaire de fin
+function replaceItemInSource(text, category, originalKey, newItem) {
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const lines = text.split(/\r?\n/);
+    const found = findItemLine(lines, category, originalKey);
+    if (!found) return null;
+    lines[found.index] = found.indent + serializeItem(newItem) + ',' + found.comment;
+    return lines.join(eol);
+}
+
+// Applique les modifications en attente à un texte source (stats : compteurs facultatifs)
+function applyEditsToSource(text, stats) {
+    Object.keys(customEdits).forEach(category => {
+        customEdits[category].forEach(edit => {
+            const lines = text.split(/\r?\n/);
+            const located = findItemLine(lines, category, edit.originalKey) || findItemLine(lines, category, itemKey(category, edit.item));
+            if (!located) { if (stats) stats.skipped++; return; }
+            if (sameItem(located.item, edit.item)) return;   // déjà appliquée
+            const replaced = replaceItemInSource(text, category, itemKey(category, located.item), edit.item);
+            if (replaced) { text = replaced; if (stats) stats.edited++; }
+        });
+    });
+    return text;
+}
+
+// Données d'origine (sans aucune modification en attente), pour comparer
+let baseDataCache = { text: null, data: null };
+function getBaseData() {
+    if (baseDataCache.text !== sourceBaseText) {
+        baseDataCache = { text: sourceBaseText, data: new Function('return (' + sourceBaseText + ');')()() };
+    }
+    return baseDataCache.data;
+}
+
+function hasPendingChanges() {
+    return Object.values(customItems).some(list => list.length) || Object.values(customEdits).some(list => list.length);
+}
+
 function buildSourceText() {
-    let text = sourceBaseText;
+    let text = applyEditsToSource(sourceBaseText);
     Object.keys(customItems).forEach(category => {
         customItems[category].forEach(item => { text = insertItemIntoSource(text, category, item); });
     });
@@ -238,9 +329,9 @@ function buildSourceText() {
 }
 
 // Recharge les données en mémoire depuis ce texte : l'ordre affiché = l'ordre du futur data.js
-function rebuildDataFromSource() {
+function rebuildDataFromSource(force = false) {
     if (!HAS_SOURCE) return false;
-    if (!Object.values(customItems).some(list => list.length)) return true;
+    if (!force && !hasPendingChanges()) return true;
     try {
         const data = new Function('return (' + buildSourceText() + ');')()();
         Object.keys(data).forEach(category => { LOCAL_GENSHIN_DATA[category] = data[category]; });
@@ -370,6 +461,9 @@ const ADMIN_CATEGORIES = {
     artifacts:  { icon: '🧰', switchLabel: 'Artéfact',   nameLabel: 'Nom de l\'artéfact * :',  saveLabel: 'Enregistrer l\'artéfact',   the: 'L\'artéfact' }
 };
 let adminCategory = 'characters';
+let adminMode = 'add';          // 'add' (ajouter) ou 'edit' (modifier un élément existant)
+let adminEditTarget = null;     // élément en cours de modification
+let adminEditCtx = null;        // valeurs d'origine du formulaire de modification
 
 const ADMIN_ARTIFACT_TYPES = ['Fleur de la vie', 'Plume de la mort', 'Sables du temps', 'Coupe d\'éonothème', 'Diadème de Logos'];
 const ADMIN_WEAPON_SUBSTATS = ['ATQ %', 'PV %', 'DÉF %', 'Maîtrise élémentaire', 'Recharge d\'énergie', 'Taux CRIT', 'DGT CRIT', 'Bonus de DGT physiques'];
@@ -463,8 +557,11 @@ function adminListField(key, label, values, defaultValue = '') {
 
 // Les sets sont écrits « Nom du set : » dans data.js
 function normalizeSetName(value) {
-    const v = (value || '').trim().replace(/[\s:]+$/, '');
-    return v ? v + ' :' : '';
+    const v = (value || '').trim();
+    if (!v) return '';
+    if (/:\s*$/.test(v)) return v.replace(/\s*:\s*$/, ' :');   // « Nom : » (forme de data.js)
+    if (v.includes(':')) return v;                              // déjà un « : » dans le nom : on n'y touche pas
+    return v + ' :';
 }
 
 function artifactSetNames() {
@@ -589,7 +686,7 @@ function collectArtifact(val) {
         icon: buildIconUrl('artifacts', val('type'), val('iconPart')),
         obtention: val('obtention'),
         set: normalizeSetName(val('set')),
-        effect: parts.join(' <br>'),
+        effect: parts.length ? parts.join(' <br>') : ((val.original && val.original.effect) || ''),
         description: val('description')
     };
 }
@@ -674,10 +771,10 @@ function extractSource(fileText) {
 
 const GITHUB_FORMAT_ERROR = 'le data.js sur GitHub n\'est pas au format à marqueurs (« LOCAL_GENSHIN_SOURCE »). Mettez d\'abord en ligne le data.js converti.';
 
-// Ajoute au texte source distant les ajouts en attente qui n'y sont pas encore
-function applyPendingToSource(sourceText) {
+// Applique au texte source distant les modifications puis les ajouts en attente qui n'y sont pas encore
+function applyPendingToSource(sourceText, stats) {
     const known = new Function('return (' + sourceText + ');')()();
-    let text = sourceText;
+    let text = applyEditsToSource(sourceText, stats);
     Object.keys(customItems).forEach(category => {
         const keys = new Set((known[category] || []).map(item => itemKey(category, item)));
         customItems[category].forEach(item => {
@@ -705,19 +802,26 @@ async function publishToGithub(settings, transform, message) {
     throw new Error('le fichier a été modifié en même temps ailleurs, réessayez.');
 }
 
-async function publishAddition(item) {
+async function publishPending(commitMessage, label, verb = 'publié') {
     const settings = loadGithubSettings();
+    const stats = { edited: 0, skipped: 0 };
     try {
         const result = await publishToGithub(settings, remoteText => {
+            stats.edited = 0; stats.skipped = 0;   // la transformation peut être rejouée après un conflit
             const source = extractSource(remoteText);
             if (!source) throw new Error(GITHUB_FORMAT_ERROR);
-            return wrapSourceAsFile(applyPendingToSource(source));
-        }, `Ajout via l'Admin : ${item.name}`);
-        showToast(`✅ « ${item.name} » publié sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.`, false, 10000);
+            return wrapSourceAsFile(applyPendingToSource(source, stats));
+        }, commitMessage);
+        const warn = stats.skipped ? ` ⚠️ ${stats.skipped} modification(s) ignorée(s) : élément introuvable sur GitHub.` : '';
+        showToast(`✅ ${label} ${verb} sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.${warn}`, false, 10000);
     } catch (e) {
         downloadDataJs();
         showToast('❌ Publication sur GitHub impossible : ' + e.message + ' Le data.js a été téléchargé à la place.', true, 15000);
     }
+}
+
+async function publishAddition(item) {
+    return publishPending(`Ajout via l'Admin : ${item.name}`, `« ${item.name} »`);
 }
 
 function commitNewItem(category, item) {
@@ -749,6 +853,62 @@ function commitNewItem(category, item) {
         showToast(`✅ « ${item.name} » ajouté${where} ! Remplacez votre ancien data.js par le fichier téléchargé.`, false, 8000);
     }
     document.querySelector(`.tab-btn[data-tab="${category}"]`).click();
+    return true;
+}
+
+// Enregistre la modification d'un élément déjà présent (ou ajouté mais pas encore publié)
+function commitEditedItem(category, original, newItem) {
+    const info = ADMIN_CATEGORIES[category];
+    const origKey = itemKey(category, original);
+    const newKey = itemKey(category, newItem);
+    if (newKey !== origKey && LOCAL_GENSHIN_DATA[category].some(existing => itemKey(category, existing) === newKey)) {
+        showToast(`❌ ${info.the} « ${newItem.name} » existe déjà : choisissez un autre nom.`, true, 5000);
+        return false;
+    }
+    if (sameItem(original, newItem)) {
+        showToast('ℹ️ Aucune modification à enregistrer.', false, 3500);
+        return false;
+    }
+
+    const pendingIndex = customItems[category].findIndex(item => itemKey(category, item) === origKey);
+    if (pendingIndex >= 0) {
+        // Élément ajouté via l'Admin mais pas encore dans data.js : on met simplement à jour l'ajout
+        customItems[category][pendingIndex] = newItem;
+        try { localStorage.setItem(CUSTOM_STORAGE_KEYS[category], JSON.stringify(customItems[category])); } catch (err) { console.error(err); }
+    } else {
+        const edits = customEdits[category];
+        const index = edits.findIndex(edit => itemKey(category, edit.item) === origKey);
+        const baseKey = index >= 0 ? edits[index].originalKey : origKey;
+        const baseItem = (getBaseData()[category] || []).find(item => itemKey(category, item) === baseKey);
+        if (baseItem && sameItem(baseItem, newItem)) {
+            if (index >= 0) edits.splice(index, 1);                       // retour à la version d'origine
+        } else if (index >= 0) {
+            edits[index] = { originalKey: baseKey, item: newItem };
+        } else {
+            edits.push({ originalKey: baseKey, item: newItem });
+        }
+        saveCustomEdits();
+    }
+
+    if (!rebuildDataFromSource(true)) {
+        showToast('❌ Modification impossible : data.js n\'a pas pu être relu correctement.', true, 6000);
+        return false;
+    }
+    const tab = document.querySelector(`.tab-btn[data-tab="${category}"]`);
+    if (!hasPendingChanges()) {
+        showToast(`ℹ️ « ${newItem.name} » est revenu à sa version d'origine : rien à enregistrer.`, false, 5000);
+        if (tab) tab.click();
+        return true;
+    }
+    const sync = githubReady(loadGithubSettings());
+    if (sync) {
+        showToast(`⏳ « ${newItem.name} » modifié. Publication sur GitHub en cours…`, false, 3000);
+        publishPending(`Modification via l'Admin : ${newItem.name}`, `« ${newItem.name} »`, 'modifié et publié');
+    } else {
+        downloadDataJs();
+        showToast(`✅ « ${newItem.name} » modifié ! Remplacez votre ancien data.js par le fichier téléchargé.`, false, 8000);
+    }
+    if (tab) tab.click();
     return true;
 }
 
@@ -856,7 +1016,7 @@ function updateAdminPreview(ta) {
         return;
     }
     box.style.display = 'block';
-    box.innerHTML = '<span class="admin-preview-label">Aperçu</span>' + newlinesToBr(ta.value);
+    box.innerHTML = '<span class="admin-preview-label">Aperçu</span>' + newlinesToBr(ta.value.replace(/\\n/g, ' '));
 }
 
 function setupAdminToolbar(form) {
@@ -970,8 +1130,181 @@ function setupGithubSection(grid) {
     });
 }
 
+// ---------- Modification d'un élément existant ----------
+// Ce que vous tapez avec Entrée devient <br> ; les « \n » d'origine (affichés tels quels dans la zone) redeviennent des retours internes
+function editTextToStored(value) {
+    const PLACEHOLDER = '\u0000';
+    return newlinesToBr(value.replace(/\\n/g, PLACEHOLDER)).replace(/\u0000/g, '\n');
+}
+
+// Lit le formulaire. En modification, un champ NON touché renvoie sa valeur d'origine exacte (rien n'est reformaté).
+function makeFormVal(form, ctx) {
+    const val = (key) => {
+        const el = form.querySelector(`[data-key="${key}"]`);
+        if (!el) return '';
+        if (ctx && key in ctx.initial && el.value === ctx.initial[key]) {
+            if (key !== 'iconPart') return ctx.raw[key];
+            const typeEl = form.querySelector('[data-key="type"]');
+            if (!typeEl || typeEl.value === ctx.initial.type) return ctx.raw.iconPart;   // lien conservé tant que ni le lien ni le type n'ont changé
+        }
+        const value = el.value.trim();
+        if (el.tagName !== 'TEXTAREA') return value;
+        return ctx ? editTextToStored(value) : newlinesToBr(value);
+    };
+    val.original = ctx ? ctx.original : null;
+    return val;
+}
+
+// Fusionne le formulaire avec l'élément d'origine : mêmes clés, même ordre, clés inconnues du formulaire conservées
+function mergeEditedItem(original, collected) {
+    const POWER = ADMIN_POWER_KEYS.map(([k]) => k);
+    const OPTIONAL = ['infocomp', 'infoult'];
+    const result = {};
+    const origPower = POWER.find(k => k in original);
+    const newPower = POWER.find(k => k in collected);
+    Object.keys(original).forEach(k => {
+        if (POWER.includes(k)) {
+            if (k === origPower && newPower) result[newPower] = collected[newPower];   // même place, éventuellement une autre clé
+            return;
+        }
+        if (k in collected) result[k] = collected[k];
+        else if (!OPTIONAL.includes(k)) result[k] = original[k];                        // clé que le formulaire ne connaît pas : conservée
+        // champ facultatif vidé : supprimé
+    });
+    Object.keys(collected).forEach(k => {
+        if (k in result || POWER.includes(k)) return;
+        if (collected[k] !== '' && collected[k] !== undefined) result[k] = collected[k];   // nouvelle clé, seulement si remplie
+    });
+    if (newPower && !(newPower in result) && collected[newPower] !== '') result[newPower] = collected[newPower];
+    return result;
+}
+
+function buildEditedItem(form, category, original, ctx) {
+    const val = makeFormVal(form, ctx);
+    if (!val('name')) return null;
+    const collected = { characters: collectCharacter, weapons: collectWeapon, artifacts: collectArtifact }[category](val);
+    return mergeEditedItem(original, collected);
+}
+
+// Partie variable du lien d'icône (ce que vous saisiriez), ou le lien entier s'il ne suit pas la règle habituelle
+function deriveIconPart(category, item) {
+    const icon = item.icon || '';
+    let m = null;
+    if (category === 'characters') {
+        m = icon.match(/^https:\/\/enka\.network\/ui\/UI_AvatarIcon_Side_(.+)\.png$/);
+    } else if (category === 'weapons') {
+        const token = ADMIN_WEAPON_ICON_TOKENS[item.type];
+        if (token) m = icon.match(new RegExp('^https://enka\\.network/ui/UI_EquipIcon_' + token + '_(.+)\\.png$'));
+    } else {
+        const n = ADMIN_ARTIFACT_ICON_SUFFIX[item.type];
+        if (n) m = icon.match(new RegExp('^https://enka\\.network/ui/UI_RelicIcon_(.+)_' + n + '\\.png$'));
+    }
+    return m ? m[1] : icon;
+}
+
+// Remplit le formulaire avec l'élément choisi et mémorise les valeurs d'origine
+function prefillForm(form, category, item) {
+    const ctx = { initial: {}, raw: {}, original: item };
+    const asText = (value) => (typeof value === 'string' ? value.replace(/\n/g, '\\n') : value);
+    const setField = (key, raw, display) => {
+        const el = form.querySelector(`[data-key="${key}"]`);
+        if (!el) return;
+        const shown = display !== undefined ? String(display) : (raw === undefined || raw === null ? '' : String(raw));
+        if (el.tagName === 'SELECT' && shown !== '' && ![...el.options].some(o => o.value === shown)) {
+            const option = document.createElement('option');   // valeur absente des listes (ex : faute de frappe d'origine) : conservée telle quelle
+            option.value = shown;
+            option.textContent = shown;
+            el.appendChild(option);
+        }
+        el.value = shown;
+        ctx.initial[key] = el.value;
+        ctx.raw[key] = raw === undefined || raw === null ? '' : raw;
+    };
+    const setText = (key) => setField(key, item[key], asText(item[key] === undefined || item[key] === null ? '' : item[key]));
+
+    if (category === 'characters') {
+        const powerKey = ADMIN_POWER_KEYS.map(([k]) => k).find(k => k in item) || 'divin';
+        setField('name', item.name);
+        setField('powerKey', powerKey);
+        setField('element', item[powerKey]);
+        ['weapon', 'rarity', 'elevation', 'nation', 'affiliation', 'constellation', 'anniversaire'].forEach(k => setField(k, item[k]));
+        setText('description');
+        ADMIN_TALENTS.forEach(([nk, dk]) => { setField(nk, item[nk]); setText(dk); });
+        [1, 2, 3, 4, 5, 6].forEach(n => { setField('c' + n, item['c' + n]); setText(`c${n}desc`); });
+        setText('infocomp');
+        setText('infoult');
+    } else if (category === 'weapons') {
+        ['name', 'type', 'rarity', 'obtention', 'main', 'sub', 'names'].forEach(k => setField(k, item[k]));
+        setText('effect');
+        setText('description');
+    } else {
+        ['name', 'type', 'rarity', 'obtention', 'set'].forEach(k => setField(k, item[k]));
+        const m = /^Set de 2 pièce\(s\) : (.*) <br>Set de 4 pièce\(s\) : (.*)$/s.exec(item.effect || '');
+        setField('bonus2', m ? m[1] : '', asText(m ? m[1] : ''));
+        setField('bonus4', m ? m[2] : '', asText(m ? m[2] : ''));
+        setText('description');
+    }
+    setField('iconPart', item.icon, deriveIconPart(category, item));
+
+    form.querySelectorAll('details.admin-section').forEach(d => { d.open = true; });
+    form.querySelectorAll('textarea').forEach(updateAdminPreview);
+    return ctx;
+}
+
+function describeEditItem(category, item) {
+    if (category === 'characters') return `${item.rarity || '?'}★ · ${getCharacterElement(item) || 'élément ?'}`;
+    if (category === 'weapons') return `${item.type || 'type ?'} · ${item.rarity || '?'}★`;
+    return `${item.type || 'type ?'} · ${item.rarity || '?'}★ · ${(item.set || '').replace(/\s*:\s*$/, '')}`;
+}
+
+// Liste filtrable des éléments de la catégorie : un clic charge l'élément dans le formulaire
+function setupEditPicker(grid) {
+    const search = document.getElementById('editSearch');
+    const results = document.getElementById('editResults');
+    let shown = [];
+    const draw = () => {
+        const query = search.value.trim().toLowerCase();
+        const items = (LOCAL_GENSHIN_DATA[adminCategory] || [])
+            .filter(item => item.name && item.name !== 'Non renseigné' && (!query || item.name.toLowerCase().includes(query)))
+            .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+        shown = items.slice(0, 60);
+        results.innerHTML = shown.map((item, i) =>
+            `<button type="button" class="edit-result" data-idx="${i}">${escapeHtml(item.name)} <small>${escapeHtml(describeEditItem(adminCategory, item))}</small></button>`
+        ).join('')
+            + (items.length > shown.length ? `<p class="admin-hint">… ${items.length - shown.length} autre(s) : précisez votre recherche.</p>` : '')
+            + (!items.length ? '<p class="admin-hint">Aucun résultat.</p>' : '');
+    };
+    results.addEventListener('click', (e) => {
+        const btn = e.target.closest('.edit-result');
+        if (!btn) return;
+        adminEditTarget = shown[Number(btn.getAttribute('data-idx'))];
+        renderAdmin(grid);
+    });
+    search.addEventListener('input', draw);
+    draw();
+    search.focus();
+}
+
 function renderAdmin(grid) {
     grid.classList.remove('talents-view');
+
+    const editing = HAS_SOURCE && adminMode === 'edit';
+    if (!editing) adminEditTarget = null;
+    const showForm = !editing || !!adminEditTarget;
+    const modeHtml = HAS_SOURCE ? `<div class="admin-mode-switch">
+            <button type="button" class="admin-mode-btn${adminMode === 'add' ? ' active' : ''}" data-admin-mode="add">➕ Ajouter</button>
+            <button type="button" class="admin-mode-btn${adminMode === 'edit' ? ' active' : ''}" data-admin-mode="edit">✏️ Modifier un élément existant</button>
+        </div>` : '';
+    const pickerHtml = (editing && !adminEditTarget) ? `<div class="edit-picker">
+            <label>Quel élément voulez-vous modifier ? (${escapeHtml(ADMIN_CATEGORIES[adminCategory].switchLabel)})</label>
+            <input type="text" id="editSearch" placeholder="Tapez une partie du nom…" autocomplete="off">
+            <div id="editResults" class="edit-results"></div>
+        </div>` : '';
+    // Boutons toujours accessibles (même quand le formulaire est masqué dans le choix d'un élément à modifier)
+    const extraButtons = `<button type="button" id="downloadDataBtn" class="admin-btn">⬇️ Télécharger data.js${HAS_SOURCE ? '' : ' (sans commentaires)'}</button>
+                    <button type="button" id="resetDataBtn" class="admin-btn">🔄 Réinitialiser les ajouts</button>`;
+    const bannerHtml = (editing && adminEditTarget) ? `<div class="edit-banner">✏️ Modification de : <strong>${escapeHtml(adminEditTarget.name)}</strong>
+            <button type="button" id="editCancelBtn" class="admin-btn small">↩️ Changer d'élément</button></div>` : '';
 
     const formHtml = { characters: adminCharacterFormHtml, weapons: adminWeaponFormHtml, artifacts: adminArtifactFormHtml }[adminCategory]();
     const switchHtml = Object.entries(ADMIN_CATEGORIES).map(([cat, c]) =>
@@ -981,20 +1314,23 @@ function renderAdmin(grid) {
     grid.innerHTML = `
         <div class="admin-panel">
             <div class="admin-panel-head">
-                <h2>⚙️ Panneau d'Administration - Ajouter un élément</h2>
+                <h2>⚙️ Panneau d'Administration - ${editing ? 'Modifier un élément' : 'Ajouter un élément'}</h2>
                 <button type="button" id="adminLogoutBtn" class="admin-btn small" title="Masque l'onglet Admin sur ce navigateur">🔒 Quitter le mode admin</button>
             </div>
+            ${modeHtml}
             <div class="admin-switch">${switchHtml}</div>
+            ${pickerHtml}
+            ${showForm ? '' : `<div class="admin-actions" style="margin-bottom: 15px;">${extraButtons}</div>`}
             ${adminStatusHtml()}
             ${githubReady(loadGithubSettings()) ? `<p class="admin-status ok">☁️ Publication automatique activée → ${escapeHtml(loadGithubSettings().repo)} (${escapeHtml(loadGithubSettings().branch || 'main')}) : plus besoin de remplacer data.js à la main.</p>` : ''}
             <p class="admin-hint">Dans les zones de texte, la touche Entrée crée un retour à la ligne (converti automatiquement en &lt;br&gt;). Le HTML reste accepté si vous préférez l'écrire à la main.</p>
-            <form id="adminAddForm" class="admin-form">
+            <form id="adminAddForm" class="admin-form"${showForm ? '' : ' style="display:none"'}>
+                ${bannerHtml}
                 ${adminToolbarHtml()}
                 ${formHtml}
                 <div class="admin-actions">
-                    <button type="submit" class="admin-btn primary">➕ ${ADMIN_CATEGORIES[adminCategory].saveLabel}</button>
-                    <button type="button" id="downloadDataBtn" class="admin-btn">⬇️ Télécharger data.js${HAS_SOURCE ? '' : ' (sans commentaires)'}</button>
-                    <button type="button" id="resetDataBtn" class="admin-btn">🔄 Réinitialiser les ajouts</button>
+                    <button type="submit" class="admin-btn primary">${editing ? '💾 Enregistrer les modifications' : '➕ ' + ADMIN_CATEGORIES[adminCategory].saveLabel}</button>
+                    ${showForm ? extraButtons : ''}
                 </div>
                 ${HAS_SOURCE ? '<p class="admin-hint">Chaque élément ajouté ici porte le commentaire « // ajouté via Admin » dans data.js. « Réinitialiser » supprime ces éléments et télécharge un data.js propre. Pour garder un élément définitivement, supprimez ce commentaire dans son ancienne ligne.</p>' : ''}
             </form>
@@ -1005,12 +1341,28 @@ function renderAdmin(grid) {
     grid.querySelectorAll('.admin-switch-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             adminCategory = btn.getAttribute('data-admin-cat');
+            adminEditTarget = null;
             renderAdmin(grid);
         });
     });
 
     const form = document.getElementById('adminAddForm');
     setupAdminToolbar(form);
+    // Modification : boutons de mode, choix de l'élément, préremplissage du formulaire
+    grid.querySelectorAll('.admin-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            adminMode = btn.getAttribute('data-admin-mode');
+            adminEditTarget = null;
+            renderAdmin(grid);
+        });
+    });
+    adminEditCtx = null;
+    if (editing && !adminEditTarget) setupEditPicker(grid);
+    if (editing && adminEditTarget) {
+        adminEditCtx = prefillForm(form, adminCategory, adminEditTarget);
+        const cancelBtn = document.getElementById('editCancelBtn');
+        if (cancelBtn) cancelBtn.addEventListener('click', () => { adminEditTarget = null; renderAdmin(grid); });
+    }
     // Lien d'icône : se met à jour quand on tape la partie variable ou qu'on change le type
     refreshIconField(form);
     form.addEventListener('input', (e) => { if (e.target.matches('[data-key="iconPart"]')) refreshIconField(form); });
@@ -1037,13 +1389,12 @@ function renderAdmin(grid) {
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        const val = (key) => {
-            const el = form.querySelector(`[data-key="${key}"]`);
-            if (!el) return '';
-            const value = el.value.trim();
-            if (el.tagName !== 'TEXTAREA') return value;
-            return newlinesToBr(value);
-        };
+        if (editing && adminEditTarget) {
+            const edited = buildEditedItem(form, adminCategory, adminEditTarget, adminEditCtx);
+            if (edited && commitEditedItem(adminCategory, adminEditTarget, edited)) adminEditTarget = null;
+            return;
+        }
+        const val = makeFormVal(form, null);
         if (!val('name')) return;
         commitNewItem(adminCategory, collectors[adminCategory](val));
     });
@@ -1078,24 +1429,28 @@ function renderAdmin(grid) {
             inFile = findAdminItems(sourceBaseText);
         }
         const pending = Object.entries(customItems).flatMap(([category, list]) => list.map(item => ({ category, name: item.name })));
+        const pendingEdits = Object.entries(customEdits).flatMap(([category, list]) => list.map(edit => ({ category, name: edit.item.name, edit: true })));
         // Un élément déjà publié et encore en attente dans ce navigateur ne doit être listé qu'une fois
         const inFileKeys = new Set(inFile.map(p => p.category + '|' + p.name.toLowerCase()));
-        const all = [...inFile, ...pending.filter(p => !inFileKeys.has(p.category + '|' + p.name.toLowerCase()))];
+        const all = [...inFile, ...pending.filter(p => !inFileKeys.has(p.category + '|' + p.name.toLowerCase())), ...pendingEdits];
         if (!all.length) {
             showToast('ℹ️ Aucun ajout fait via l\'Admin n\'a été trouvé. (Les éléments ajoutés avec une ancienne version de l\'Admin ne sont pas repérables : supprimez leur ligne dans data.js ou restaurez votre sauvegarde.)', false, 10000);
             return;
         }
-        const shown = all.slice(0, 8).map(p => '• ' + escapeHtml(p.name)).join('<br>');
+        const shown = all.slice(0, 8).map(p => (p.edit ? '✏️ ' : '• ') + escapeHtml(p.name) + (p.edit ? ' (modification)' : '')).join('<br>');
         const more = all.length > 8 ? `<br>… et ${all.length - 8} autre(s)` : '';
-        const note = !inFile.length ? ''
-            : sync ? '<br><br>Ces éléments seront <strong>supprimés directement sur GitHub</strong> (vos marqueurs sont conservés).'
-            : '<br><br>Un nouveau <strong>data.js sans ces ajouts</strong> sera téléchargé (vos marqueurs sont conservés) : il faudra remplacer votre fichier par celui-ci.';
+        const editNote = pendingEdits.length ? '<br><br>Les modifications déjà enregistrées dans data.js ne peuvent pas être annulées ici (restaurez votre sauvegarde pour les retirer).' : '';
+        const note = (!inFile.length ? '' : '')
+            + (!inFile.length ? '' : sync ? '<br><br>Ces éléments seront <strong>supprimés directement sur GitHub</strong> (vos marqueurs sont conservés).'
+            : '<br><br>Un nouveau <strong>data.js sans ces ajouts</strong> sera téléchargé (vos marqueurs sont conservés) : il faudra remplacer votre fichier par celui-ci.') + editNote;
         showConfirmBox(
-            `Effacer les <strong>${all.length}</strong> élément(s) ajouté(s) via l'Admin ?<br><small>${shown}${more}${note}</small>`,
+            `Effacer les <strong>${all.length}</strong> élément(s) ajouté(s) ou modifié(s) via l'Admin ?<br><small>${shown}${more}${note}</small>`,
             !inFile.length ? 'Oui, effacer' : sync ? 'Oui, effacer et publier' : 'Oui, effacer et télécharger data.js',
             async () => {
                 Object.values(CUSTOM_STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+                localStorage.removeItem(CUSTOM_EDITS_KEY);
                 Object.keys(customItems).forEach(category => { customItems[category] = []; });
+                Object.keys(customEdits).forEach(category => { customEdits[category] = []; });
                 if (!inFile.length) {
                     location.reload();
                     return;
