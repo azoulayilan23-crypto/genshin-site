@@ -45,6 +45,33 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
     }
 }
 
+// --- MODE ADMIN : l'onglet Admin n'est visible que sur votre navigateur ---
+// Pour l'activer, ouvrez le site une fois avec  ?admin=VOTRE_CODE  (ex : https://monsite.github.io/?admin=changez-moi).
+// ⚠️ Ce n'est PAS une sécurité (le code est lisible dans ce fichier) : cela masque simplement le bouton aux visiteurs.
+// Un visiteur ne peut de toute façon rien modifier pour les autres : le site est statique et il n'a aucun accès à votre GitHub.
+const ADMIN_SECRET_CODE = 'MVTMJSUN';   // ← remplacez par votre propre code
+const ADMIN_FLAG_KEY = 'genshin_admin';
+
+function isAdminMode() {
+    try { return localStorage.getItem(ADMIN_FLAG_KEY) === '1'; } catch (e) { return false; }
+}
+
+(function activateAdminFromUrl() {
+    try {
+        const params = new URLSearchParams(location.search);
+        if (!params.has('admin')) return;
+        if (params.get('admin') === ADMIN_SECRET_CODE) localStorage.setItem(ADMIN_FLAG_KEY, '1');
+        params.delete('admin');
+        const query = params.toString();
+        history.replaceState(null, '', location.pathname + (query ? '?' + query : '') + location.hash);
+    } catch (e) {}
+})();
+
+(function hideAdminTabForVisitors() {
+    const adminTab = document.querySelector('.tab-btn[data-tab="admin"]');
+    if (adminTab && !isAdminMode()) adminTab.style.display = 'none';
+})();
+
 let currentTab = 'characters';
 let currentElementFilter = 'all';
 let currentWeaponTypeFilter = 'all';
@@ -568,6 +595,131 @@ function collectArtifact(val) {
 }
 
 // ---------- Enregistrement commun ----------
+// --- PUBLICATION AUTOMATIQUE SUR GITHUB (API « contents », jeton personnel stocké uniquement dans ce navigateur) ---
+const GITHUB_SETTINGS_KEY = 'genshin_github_sync';
+
+function loadGithubSettings() {
+    try { return JSON.parse(localStorage.getItem(GITHUB_SETTINGS_KEY)) || {}; } catch (e) { return {}; }
+}
+
+function saveGithubSettings(settings) {
+    localStorage.setItem(GITHUB_SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function githubReady(settings) {
+    return !!(settings && settings.enabled && settings.repo && settings.token);
+}
+
+function utf8ToBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(binary);
+}
+
+function base64ToUtf8(base64) {
+    const binary = atob(base64.replace(/\s/g, ''));
+    return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
+}
+
+function githubErrorMessage(status, json) {
+    if (status === 401) return 'jeton refusé (invalide ou expiré).';
+    if (status === 403) return 'accès refusé : le jeton n\'a pas la permission « Contents : Read and write » sur ce dépôt (ou limite de requêtes atteinte).';
+    if (status === 404) return 'dépôt, branche ou fichier introuvable (vérifiez le nom du dépôt, la branche et le chemin), ou le jeton n\'a pas accès à ce dépôt.';
+    return `erreur GitHub ${status}${json && json.message ? ' : ' + json.message : ''}.`;
+}
+
+async function githubFetch(settings, method, body, raw = false) {
+    const url = `https://api.github.com/repos/${settings.repo}/contents/${encodeURI(settings.path || 'data.js')}`
+        + (method === 'GET' ? `?ref=${encodeURIComponent(settings.branch || 'main')}` : '');
+    const headers = {
+        Authorization: `Bearer ${settings.token}`,
+        Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+    };
+    if (body) headers['Content-Type'] = 'application/json';
+    let res;
+    try {
+        res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    } catch (e) {
+        throw new Error('connexion à GitHub impossible (vérifiez votre connexion Internet).');
+    }
+    if (raw) return { ok: res.ok, status: res.status, text: res.ok ? await res.text() : '' };
+    let json = null;
+    try { json = await res.json(); } catch (e) {}
+    return { ok: res.ok, status: res.status, json };
+}
+
+// Lit data.js tel qu'il est sur GitHub (et pas la copie éventuellement en cache du site)
+async function githubGetFile(settings) {
+    const res = await githubFetch(settings, 'GET');
+    if (!res.ok) throw new Error(githubErrorMessage(res.status, res.json));
+    const info = res.json || {};
+    let text;
+    if (info.content && info.encoding === 'base64') {
+        text = base64ToUtf8(info.content);
+    } else {
+        const rawRes = await githubFetch(settings, 'GET', null, true);   // fichier > 1 Mo : contenu brut
+        if (!rawRes.ok) throw new Error(githubErrorMessage(rawRes.status, null));
+        text = rawRes.text;
+    }
+    return { text, sha: info.sha };
+}
+
+// Le texte « LOCAL_GENSHIN_SOURCE » d'un data.js (même format que celui produit par l'Admin)
+function extractSource(fileText) {
+    const m = fileText.match(/const LOCAL_GENSHIN_SOURCE = ([\s\S]*?);\s*\nconst LOCAL_GENSHIN_DATA = LOCAL_GENSHIN_SOURCE\(\);/);
+    return m ? m[1] : null;
+}
+
+const GITHUB_FORMAT_ERROR = 'le data.js sur GitHub n\'est pas au format à marqueurs (« LOCAL_GENSHIN_SOURCE »). Mettez d\'abord en ligne le data.js converti.';
+
+// Ajoute au texte source distant les ajouts en attente qui n'y sont pas encore
+function applyPendingToSource(sourceText) {
+    const known = new Function('return (' + sourceText + ');')()();
+    let text = sourceText;
+    Object.keys(customItems).forEach(category => {
+        const keys = new Set((known[category] || []).map(item => itemKey(category, item)));
+        customItems[category].forEach(item => {
+            if (!keys.has(itemKey(category, item))) text = insertItemIntoSource(text, category, item);
+        });
+    });
+    return text;
+}
+
+// Lit le fichier distant, le transforme (transform reçoit le texte distant et renvoie le nouveau texte) puis l'enregistre
+async function publishToGithub(settings, transform, message) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const remote = await githubGetFile(settings);
+        const newText = transform(remote.text);
+        const put = await githubFetch(settings, 'PUT', {
+            message,
+            content: utf8ToBase64(newText),
+            sha: remote.sha,
+            branch: settings.branch || 'main'
+        });
+        if (put.ok) return { sha: put.json && put.json.commit ? put.json.commit.sha : '', text: newText };
+        if (put.status === 409 || put.status === 422) continue;   // fichier modifié entre-temps : on relit et on recommence
+        throw new Error(githubErrorMessage(put.status, put.json));
+    }
+    throw new Error('le fichier a été modifié en même temps ailleurs, réessayez.');
+}
+
+async function publishAddition(item) {
+    const settings = loadGithubSettings();
+    try {
+        const result = await publishToGithub(settings, remoteText => {
+            const source = extractSource(remoteText);
+            if (!source) throw new Error(GITHUB_FORMAT_ERROR);
+            return wrapSourceAsFile(applyPendingToSource(source));
+        }, `Ajout via l'Admin : ${item.name}`);
+        showToast(`✅ « ${item.name} » publié sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.`, false, 10000);
+    } catch (e) {
+        downloadDataJs();
+        showToast('❌ Publication sur GitHub impossible : ' + e.message + ' Le data.js a été téléchargé à la place.', true, 15000);
+    }
+}
+
 function commitNewItem(category, item) {
     const info = ADMIN_CATEGORIES[category];
     const key = itemKey(category, item);
@@ -587,9 +739,15 @@ function commitNewItem(category, item) {
         document.querySelector(`.tab-btn[data-tab="${category}"]`).click();
         return true;
     }
-    downloadDataJs();
+    const sync = githubReady(loadGithubSettings());
+    if (!sync) downloadDataJs();
     const where = !HAS_SOURCE ? '' : marker ? ' à l\'emplacement du marqueur « //Pour Claude »' : ' en fin de liste (aucun marqueur correspondant)';
-    showToast(`✅ « ${item.name} » ajouté${where} ! Remplacez votre ancien data.js par le fichier téléchargé.`, false, 8000);
+    if (sync) {
+        showToast(`⏳ « ${item.name} » ajouté${where}. Publication sur GitHub en cours…`, false, 3000);
+        publishAddition(item);
+    } else {
+        showToast(`✅ « ${item.name} » ajouté${where} ! Remplacez votre ancien data.js par le fichier téléchargé.`, false, 8000);
+    }
     document.querySelector(`.tab-btn[data-tab="${category}"]`).click();
     return true;
 }
@@ -737,6 +895,81 @@ function adminStatusHtml() {
     </div>`;
 }
 
+function adminGithubHtml() {
+    const g = loadGithubSettings();
+    return `
+        <details class="admin-section" id="githubSection"${githubReady(g) ? ' open' : ''}>
+            <summary>☁️ Publication automatique sur GitHub${githubReady(g) ? ' — activée' : ''}</summary>
+            <p class="admin-hint">Quand c'est activé, chaque ajout (ou réinitialisation) met à jour data.js directement dans votre dépôt, sans téléchargement ni envoi manuel. Le site GitHub Pages se met à jour 1 à 2 minutes plus tard.<br>
+            <strong>Jeton :</strong> GitHub → Settings → Developer settings → Personal access tokens → <em>Fine-grained tokens</em> → « Generate new token » : accès limité à <em>ce seul dépôt</em>, permission <em>Contents : Read and write</em>, avec une date d'expiration. Il reste uniquement dans ce navigateur (jamais dans le code ni sur GitHub).</p>
+            <div class="admin-grid">
+                <div class="admin-field"><label>Dépôt (pseudo/nom-du-depot) :</label><input type="text" id="ghRepo" value="${escapeHtml(g.repo || '')}" placeholder="monpseudo/mon-site" autocomplete="off"></div>
+                <div class="admin-field"><label>Branche :</label><input type="text" id="ghBranch" value="${escapeHtml(g.branch || 'main')}" autocomplete="off"></div>
+                <div class="admin-field"><label>Fichier :</label><input type="text" id="ghPath" value="${escapeHtml(g.path || 'data.js')}" autocomplete="off"></div>
+                <div class="admin-field"><label>Jeton d'accès :</label><input type="password" id="ghToken" placeholder="${g.token ? '•••••••• (enregistré, laissez vide pour le garder)' : 'github_pat_…'}" autocomplete="new-password"></div>
+            </div>
+            <label class="admin-check"><input type="checkbox" id="ghEnabled"${g.enabled ? ' checked' : ''}> Publier automatiquement sur GitHub à chaque ajout / réinitialisation</label>
+            <div class="admin-actions">
+                <button type="button" id="ghSaveBtn" class="admin-btn primary">💾 Enregistrer</button>
+                <button type="button" id="ghTestBtn" class="admin-btn">🔌 Tester la connexion</button>
+                <button type="button" id="ghForgetBtn" class="admin-btn">🗑️ Oublier ces réglages</button>
+            </div>
+        </details>`;
+}
+
+function readGithubInputs() {
+    const saved = loadGithubSettings();
+    return {
+        repo: document.getElementById('ghRepo').value.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/, '').replace(/\/+$/, ''),
+        branch: document.getElementById('ghBranch').value.trim() || 'main',
+        path: document.getElementById('ghPath').value.trim().replace(/^\/+/, '') || 'data.js',
+        token: document.getElementById('ghToken').value.trim() || saved.token || '',
+        enabled: document.getElementById('ghEnabled').checked
+    };
+}
+
+function setupGithubSection(grid) {
+    document.getElementById('ghSaveBtn').addEventListener('click', () => {
+        const settings = readGithubInputs();
+        if (settings.enabled && (!settings.repo || !settings.token)) {
+            showToast('❌ Pour activer la publication, renseignez le dépôt et le jeton.', true, 5000);
+            return;
+        }
+        saveGithubSettings(settings);
+        showToast(settings.enabled ? '✅ Réglages enregistrés : la publication automatique est activée.' : '✅ Réglages enregistrés (publication automatique désactivée).', false, 4000);
+        renderAdmin(grid);
+    });
+
+    document.getElementById('ghTestBtn').addEventListener('click', async () => {
+        const settings = readGithubInputs();
+        if (!settings.repo || !settings.token) {
+            showToast('❌ Renseignez le dépôt et le jeton avant de tester.', true, 4000);
+            return;
+        }
+        showToast('⏳ Test de la connexion…', false, 2500);
+        try {
+            const remote = await githubGetFile(settings);
+            const source = extractSource(remote.text);
+            if (!source) throw new Error(GITHUB_FORMAT_ERROR);
+            const markers = countMarkers(source);
+            showToast(`✅ Connexion OK : « ${settings.path} » trouvé sur ${settings.repo} (${settings.branch}), ${markers} marqueur(s) « //Pour Claude ». Pensez à cliquer sur « Enregistrer ».`, false, 9000);
+        } catch (e) {
+            showToast('❌ Échec : ' + e.message, true, 10000);
+        }
+    });
+
+    document.getElementById('ghForgetBtn').addEventListener('click', () => {
+        localStorage.removeItem(GITHUB_SETTINGS_KEY);
+        showToast('🗑️ Réglages GitHub (et jeton) effacés de ce navigateur.', false, 4000);
+        renderAdmin(grid);
+    });
+
+    document.getElementById('adminLogoutBtn').addEventListener('click', () => {
+        localStorage.removeItem(ADMIN_FLAG_KEY);
+        location.reload();
+    });
+}
+
 function renderAdmin(grid) {
     grid.classList.remove('talents-view');
 
@@ -747,9 +980,13 @@ function renderAdmin(grid) {
 
     grid.innerHTML = `
         <div class="admin-panel">
-            <h2>⚙️ Panneau d'Administration - Ajouter un élément</h2>
+            <div class="admin-panel-head">
+                <h2>⚙️ Panneau d'Administration - Ajouter un élément</h2>
+                <button type="button" id="adminLogoutBtn" class="admin-btn small" title="Masque l'onglet Admin sur ce navigateur">🔒 Quitter le mode admin</button>
+            </div>
             <div class="admin-switch">${switchHtml}</div>
             ${adminStatusHtml()}
+            ${githubReady(loadGithubSettings()) ? `<p class="admin-status ok">☁️ Publication automatique activée → ${escapeHtml(loadGithubSettings().repo)} (${escapeHtml(loadGithubSettings().branch || 'main')}) : plus besoin de remplacer data.js à la main.</p>` : ''}
             <p class="admin-hint">Dans les zones de texte, la touche Entrée crée un retour à la ligne (converti automatiquement en &lt;br&gt;). Le HTML reste accepté si vous préférez l'écrire à la main.</p>
             <form id="adminAddForm" class="admin-form">
                 ${adminToolbarHtml()}
@@ -761,6 +998,7 @@ function renderAdmin(grid) {
                 </div>
                 ${HAS_SOURCE ? '<p class="admin-hint">Chaque élément ajouté ici porte le commentaire « // ajouté via Admin » dans data.js. « Réinitialiser » supprime ces éléments et télécharge un data.js propre. Pour garder un élément définitivement, supprimez ce commentaire dans son ancienne ligne.</p>' : ''}
             </form>
+            ${adminGithubHtml()}
         </div>
     `;
 
@@ -811,6 +1049,7 @@ function renderAdmin(grid) {
     });
 
     document.getElementById('downloadDataBtn').addEventListener('click', downloadDataJs);
+    setupGithubSection(grid);
 
     const convertInput = document.getElementById('convertDataInput');
     if (convertInput) {
@@ -820,21 +1059,41 @@ function renderAdmin(grid) {
         });
     }
 
-    document.getElementById('resetDataBtn').addEventListener('click', () => {
-        const inFile = HAS_SOURCE ? findAdminItems(sourceBaseText) : [];
+    document.getElementById('resetDataBtn').addEventListener('click', async () => {
+        const settings = loadGithubSettings();
+        const sync = HAS_SOURCE && githubReady(settings);
+        let inFile = [];
+        if (sync) {
+            // Avec GitHub : on lit la vraie version en ligne pour lister ce qui sera effacé
+            try {
+                const remote = await githubGetFile(settings);
+                const source = extractSource(remote.text);
+                if (!source) throw new Error(GITHUB_FORMAT_ERROR);
+                inFile = findAdminItems(source);
+            } catch (e) {
+                showToast('❌ Lecture de GitHub impossible : ' + e.message, true, 10000);
+                return;
+            }
+        } else if (HAS_SOURCE) {
+            inFile = findAdminItems(sourceBaseText);
+        }
         const pending = Object.entries(customItems).flatMap(([category, list]) => list.map(item => ({ category, name: item.name })));
-        const all = [...inFile, ...pending];
+        // Un élément déjà publié et encore en attente dans ce navigateur ne doit être listé qu'une fois
+        const inFileKeys = new Set(inFile.map(p => p.category + '|' + p.name.toLowerCase()));
+        const all = [...inFile, ...pending.filter(p => !inFileKeys.has(p.category + '|' + p.name.toLowerCase()))];
         if (!all.length) {
             showToast('ℹ️ Aucun ajout fait via l\'Admin n\'a été trouvé. (Les éléments ajoutés avec une ancienne version de l\'Admin ne sont pas repérables : supprimez leur ligne dans data.js ou restaurez votre sauvegarde.)', false, 10000);
             return;
         }
         const shown = all.slice(0, 8).map(p => '• ' + escapeHtml(p.name)).join('<br>');
         const more = all.length > 8 ? `<br>… et ${all.length - 8} autre(s)` : '';
-        const note = inFile.length ? '<br><br>Un nouveau <strong>data.js sans ces ajouts</strong> sera téléchargé (vos marqueurs sont conservés) : il faudra remplacer votre fichier par celui-ci.' : '';
+        const note = !inFile.length ? ''
+            : sync ? '<br><br>Ces éléments seront <strong>supprimés directement sur GitHub</strong> (vos marqueurs sont conservés).'
+            : '<br><br>Un nouveau <strong>data.js sans ces ajouts</strong> sera téléchargé (vos marqueurs sont conservés) : il faudra remplacer votre fichier par celui-ci.';
         showConfirmBox(
             `Effacer les <strong>${all.length}</strong> élément(s) ajouté(s) via l'Admin ?<br><small>${shown}${more}${note}</small>`,
-            inFile.length ? 'Oui, effacer et télécharger data.js' : 'Oui, effacer',
-            () => {
+            !inFile.length ? 'Oui, effacer' : sync ? 'Oui, effacer et publier' : 'Oui, effacer et télécharger data.js',
+            async () => {
                 Object.values(CUSTOM_STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
                 Object.keys(customItems).forEach(category => { customItems[category] = []; });
                 if (!inFile.length) {
@@ -842,14 +1101,29 @@ function renderAdmin(grid) {
                     return;
                 }
                 try {
+                    if (sync) {
+                        showToast('⏳ Suppression sur GitHub en cours…', false, 3000);
+                        const result = await publishToGithub(settings, remoteText => {
+                            const source = extractSource(remoteText);
+                            if (!source) throw new Error(GITHUB_FORMAT_ERROR);
+                            return wrapSourceAsFile(removeAdminItems(source));
+                        }, 'Réinitialisation des ajouts faits via l\'Admin');
+                        showToast(`✅ ${all.length} ajout(s) effacé(s) sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.`, false, 10000);
+                    }
                     sourceBaseText = removeAdminItems(sourceBaseText);
                     applyBaseText(sourceBaseText);
-                    downloadTextFile(wrapSourceAsFile(sourceBaseText), 'data.js');
-                    showToast(`✅ ${all.length} ajout(s) effacé(s). Remplacez votre data.js par le fichier téléchargé, puis faites Ctrl+F5.`, false, 10000);
+                    if (!sync) {
+                        downloadTextFile(wrapSourceAsFile(sourceBaseText), 'data.js');
+                        showToast(`✅ ${all.length} ajout(s) effacé(s). Remplacez votre data.js par le fichier téléchargé, puis faites Ctrl+F5.`, false, 10000);
+                    }
                     renderAdmin(grid);
                 } catch (e) {
                     console.error(e);
-                    showToast('❌ Réinitialisation impossible : ' + e.message, true, 6000);
+                    sourceBaseText = removeAdminItems(sourceBaseText);
+                    applyBaseText(sourceBaseText);
+                    downloadTextFile(wrapSourceAsFile(sourceBaseText), 'data.js');
+                    showToast('❌ Publication sur GitHub impossible : ' + e.message + ' Le data.js nettoyé a été téléchargé à la place.', true, 15000);
+                    renderAdmin(grid);
                 }
             }
         );
@@ -859,6 +1133,7 @@ function renderAdmin(grid) {
 function render() {
     const grid = document.getElementById('mainGrid');
     if (!grid) return;
+    if (currentTab === 'admin' && !isAdminMode()) currentTab = 'characters';
     const controls = document.getElementById('controlsContainer');
     if (controls) controls.style.display = (currentTab === 'admin') ? 'none' : 'flex';
     
