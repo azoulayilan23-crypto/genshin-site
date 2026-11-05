@@ -328,3 +328,14 @@ h1 { color: var(--primary-color); margin-bottom: 5px; }
 .edit-result:hover { border-color: var(--primary-color); }
 .edit-result small { color: #8a8f98; margin-left: 8px; }
 .edit-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: rgba(74, 144, 226, 0.12); border: 1px solid var(--primary-color); border-radius: 8px; padding: 10px 14px; }
+
+/* --- Boîte « réinitialiser / valider » --- */
+.confirm-box.reset-box { max-width: 580px; }
+.reset-tools { display: flex; gap: 8px; margin-bottom: 8px; }
+.reset-list { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px 0; }
+.reset-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--input-bg); border: 1px solid #3d4263; border-radius: 8px; cursor: pointer; }
+.reset-item input { width: auto; }
+.reset-item small { margin-left: auto; text-align: right; color: #8a8f98; }
+.reset-note { margin: 0 0 14px 0; }
+.reset-actions { flex-wrap: wrap; }
+.reset-actions .admin-btn[disabled] { opacity: 0.45; cursor: not-allowed; }

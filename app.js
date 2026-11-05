@@ -2,6 +2,11 @@
 // Les ajouts sont gardés dans le navigateur tant que data.js n'a pas été remplacé par la
 // version téléchargée. Dès qu'un élément est présent dans data.js, il est retiré de la
 // sauvegarde du navigateur (pas de doublon).
+// Chaque ligne ajoutée par l'Admin porte ce commentaire : « Réinitialiser » peut alors la retrouver.
+// (Défini ici, avant le chargement des ajouts en attente, qui s'en sert dès le démarrage.)
+const ADMIN_TAG = '// ajouté via Admin';
+const ADMIN_TAG_RE = /[ \t]*\/\/[ \t]*ajouté via Admin[ \t]*$/;
+
 const CUSTOM_STORAGE_KEYS = {
     characters: 'genshin_custom_chars',
     weapons: 'genshin_custom_weapons',
@@ -28,6 +33,16 @@ const CUSTOM_EDITS_KEY = 'genshin_custom_edits';
 const customEdits = { characters: [], weapons: [], artifacts: [] };
 
 // Deux éléments identiques (l'ordre des clés n'a pas d'importance)
+// Ajouts en attente que vous avez choisi de garder définitivement : insérés SANS l'étiquette « ajouté via Admin »
+const CUSTOM_KEEP_KEY = 'genshin_custom_keep';
+const customKeep = new Set();
+function saveCustomKeep() {
+    try {
+        if (customKeep.size) localStorage.setItem(CUSTOM_KEEP_KEY, JSON.stringify([...customKeep]));
+        else localStorage.removeItem(CUSTOM_KEEP_KEY);
+    } catch (e) {}
+}
+
 function sameItem(a, b) {
     const norm = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]]));
     return norm(a) === norm(b);
@@ -54,6 +69,14 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
         }
         customItems[category] = pending;
     });
+    // Ajouts gardés définitivement : on ne conserve que ceux qui sont encore en attente
+    let savedKeep = [];
+    try { savedKeep = JSON.parse(localStorage.getItem(CUSTOM_KEEP_KEY)) || []; } catch (e) {}
+    const pendingKeys = new Set();
+    Object.keys(customItems).forEach(category => customItems[category].forEach(item => pendingKeys.add(category + '|' + itemKey(category, item))));
+    savedKeep.filter(key => pendingKeys.has(key)).forEach(key => customKeep.add(key));
+    saveCustomKeep();
+
     if (HAS_SOURCE) {
         // Modifications en attente : on retire celles que data.js contient déjà
         let savedEdits = {};
@@ -114,6 +137,49 @@ function escapeHtml(text) {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Boîte de choix : on coche les éléments, puis on les efface ou on les garde définitivement
+function showResetDialog(entries, noteHtml, onChoose) {
+    const stateLabel = e => e.edit ? 'modification en attente' : e.state === 'pending' ? (e.kept ? 'en attente, gardé définitivement' : 'en attente, pas encore publié') : 'déjà enregistré dans data.js';
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `<div class="confirm-box reset-box">
+        <p><strong>Éléments ajoutés ou modifiés via l'Admin</strong><br><small>Cochez ceux qui vous intéressent (rien n'est coché par défaut).</small></p>
+        <div class="reset-tools">
+            <button type="button" class="admin-btn small" data-act="all">Tout cocher</button>
+            <button type="button" class="admin-btn small" data-act="none">Tout décocher</button>
+        </div>
+        <div class="reset-list">${entries.map((e, i) => `<label class="reset-item">
+            <input type="checkbox" data-idx="${i}"><span>${e.edit ? '✏️ ' : ''}${escapeHtml(e.name)}</span>
+            <small>${escapeHtml(ADMIN_CATEGORIES[e.category].switchLabel)} · ${stateLabel(e)}</small></label>`).join('')}</div>
+        <p class="reset-note"><small>🗑️ <strong>Effacer</strong> : supprime l'élément (ou annule la modification en attente).<br>
+        ✅ <strong>Garder définitivement</strong> : retire l'étiquette « ajouté via Admin » ; « Réinitialiser » ne le touchera plus.${noteHtml}</small></p>
+        <div class="confirm-actions reset-actions">
+            <button type="button" class="admin-btn primary" data-act="erase" disabled>🗑️ Effacer les éléments cochés</button>
+            <button type="button" class="admin-btn" data-act="keep" disabled>✅ Garder définitivement</button>
+            <button type="button" class="admin-btn" data-act="cancel">Annuler</button>
+        </div></div>`;
+    const boxes = () => [...overlay.querySelectorAll('input[type="checkbox"]')];
+    const selected = () => boxes().filter(c => c.checked).map(c => entries[Number(c.getAttribute('data-idx'))]);
+    const refresh = () => {
+        const chosen = selected();
+        const eraseBtn = overlay.querySelector('[data-act="erase"]');
+        const keepBtn = overlay.querySelector('[data-act="keep"]');
+        eraseBtn.disabled = !chosen.length;
+        eraseBtn.textContent = chosen.length ? `🗑️ Effacer les ${chosen.length} élément(s) coché(s)` : '🗑️ Effacer les éléments cochés';
+        const keepable = chosen.filter(e => !e.edit);
+        keepBtn.disabled = !keepable.length;
+        keepBtn.textContent = keepable.length ? `✅ Garder définitivement (${keepable.length})` : '✅ Garder définitivement';
+    };
+    overlay.addEventListener('change', refresh);
+    overlay.addEventListener('click', (e) => {
+        const act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (act === 'all' || act === 'none') { boxes().forEach(c => { c.checked = act === 'all'; }); refresh(); }
+        else if (act === 'erase' || act === 'keep') { const chosen = selected(); overlay.remove(); onChoose(act, chosen); }
+        else if (act === 'cancel' || e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+}
+
 // Boîte de confirmation dans la page (les confirm()/alert() natifs peuvent être bloqués par le navigateur)
 function showConfirmBox(messageHtml, confirmLabel, onConfirm) {
     const overlay = document.createElement('div');
@@ -167,31 +233,44 @@ function buildDataJsLegacy() {
 const DATA_JS_HEADER = "// Les lignes « //Pour Claude » indiquent où le panneau Admin insère les nouveaux éléments (il les décale d'un cran vers le bas).\n"
     + "// Ne changez pas la structure « LOCAL_GENSHIN_SOURCE » : app.js lit son texte pour conserver ces commentaires.\n";
 
-// Chaque ligne ajoutée par l'Admin porte ce commentaire : « Réinitialiser » supprime les lignes marquées.
-// (Pour garder définitivement un élément, supprimez ce commentaire dans data.js.)
-const ADMIN_TAG = '// ajouté via Admin';
-const ADMIN_TAG_RE = /[ \t]*\/\/[ \t]*ajouté via Admin[ \t]*$/;
 
 // Éléments marqués « ajouté via Admin » dans un texte source
-function findAdminItems(text) {
+// Lignes étiquetées « ajouté via Admin » : position, catégorie, nom et clé d'identité exacte
+function scanAdminLines(text) {
+    const lines = text.split(/\r?\n/);
     const found = [];
     let category = null;
-    text.split(/\r?\n/).forEach(line => {
+    lines.forEach((line, index) => {
         const start = line.match(/^\s*(characters|weapons|artifacts)\s*:\s*\[/);
         if (start) { category = start[1]; return; }
-        if (category && ADMIN_TAG_RE.test(line)) {
-            const m = line.match(/\{\s*name:\s*("(?:[^"\\]|\\.)*")/);
-            let name = '(sans nom)';
-            try { if (m) name = JSON.parse(m[1]); } catch (e) {}
-            found.push({ category, name });
-        }
+        if (!category || !ADMIN_TAG_RE.test(line)) return;
+        let item = null;
+        const m = line.match(/^(\s*)(\{.*\})(\s*,?)((?:\s*\/\/.*)?)\s*$/);
+        if (m) { try { item = new Function('return (' + m[2] + ');')(); } catch (e) {} }
+        const name = item && item.name ? String(item.name) : '(sans nom)';
+        found.push({ index, category, name, key: item ? itemKey(category, item) : name.trim().toLowerCase() });
     });
-    return found;
+    return { lines, found };
 }
 
-function removeAdminItems(text) {
+function findAdminItems(text) {
+    return scanAdminLines(text).found.map(({ category, name, key }) => ({ category, name, key }));
+}
+
+// keys : ensemble de « catégorie|clé » à traiter (sans argument : toutes les lignes étiquetées)
+function removeAdminItems(text, keys) {
     const eol = text.includes('\r\n') ? '\r\n' : '\n';
-    return text.split(/\r?\n/).filter(line => !ADMIN_TAG_RE.test(line)).join(eol);
+    const { lines, found } = scanAdminLines(text);
+    const drop = new Set(found.filter(f => !keys || keys.has(f.category + '|' + f.key)).map(f => f.index));
+    return lines.filter((_, i) => !drop.has(i)).join(eol);
+}
+
+// Garde définitivement : retire seulement le commentaire d'étiquette, la ligne reste
+function untagAdminItems(text, keys) {
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const { lines, found } = scanAdminLines(text);
+    found.filter(f => !keys || keys.has(f.category + '|' + f.key)).forEach(f => { lines[f.index] = lines[f.index].replace(ADMIN_TAG_RE, ''); });
+    return lines.join(eol);
 }
 
 function wrapSourceAsFile(sourceText) {
@@ -250,7 +329,8 @@ function insertItemIntoSource(text, category, item) {
         const bare = prevLine.replace(ADMIN_TAG_RE, '').replace(/[ \t]+$/, '');
         if (!/,$/.test(bare)) lines[spot.fixCommaAt] = bare + ',' + (ADMIN_TAG_RE.test(prevLine) ? ' ' + ADMIN_TAG : '');
     }
-    lines.splice(spot.index, 0, spot.indent + serializeItem(item) + ', ' + ADMIN_TAG);
+    const kept = customKeep.has(category + '|' + itemKey(category, item));
+    lines.splice(spot.index, 0, spot.indent + serializeItem(item) + (kept ? ',' : ', ' + ADMIN_TAG));
     return lines.join(eol);
 }
 
@@ -1302,7 +1382,7 @@ function renderAdmin(grid) {
         </div>` : '';
     // Boutons toujours accessibles (même quand le formulaire est masqué dans le choix d'un élément à modifier)
     const extraButtons = `<button type="button" id="downloadDataBtn" class="admin-btn">⬇️ Télécharger data.js${HAS_SOURCE ? '' : ' (sans commentaires)'}</button>
-                    <button type="button" id="resetDataBtn" class="admin-btn">🔄 Réinitialiser les ajouts</button>`;
+                    <button type="button" id="resetDataBtn" class="admin-btn">🧹 Réinitialiser / valider les ajouts</button>`;
     const bannerHtml = (editing && adminEditTarget) ? `<div class="edit-banner">✏️ Modification de : <strong>${escapeHtml(adminEditTarget.name)}</strong>
             <button type="button" id="editCancelBtn" class="admin-btn small">↩️ Changer d'élément</button></div>` : '';
 
@@ -1332,7 +1412,7 @@ function renderAdmin(grid) {
                     <button type="submit" class="admin-btn primary">${editing ? '💾 Enregistrer les modifications' : '➕ ' + ADMIN_CATEGORIES[adminCategory].saveLabel}</button>
                     ${showForm ? extraButtons : ''}
                 </div>
-                ${HAS_SOURCE ? '<p class="admin-hint">Chaque élément ajouté ici porte le commentaire « // ajouté via Admin » dans data.js. « Réinitialiser » supprime ces éléments et télécharge un data.js propre. Pour garder un élément définitivement, supprimez ce commentaire dans son ancienne ligne.</p>' : ''}
+                ${HAS_SOURCE ? '<p class="admin-hint">Chaque élément ajouté ici porte le commentaire « // ajouté via Admin » dans data.js. Le bouton « Réinitialiser / valider » vous laisse choisir, élément par élément, de les effacer ou de les garder définitivement (le commentaire est alors retiré).</p>' : ''}
             </form>
             ${adminGithubHtml()}
         </div>
@@ -1413,75 +1493,120 @@ function renderAdmin(grid) {
     document.getElementById('resetDataBtn').addEventListener('click', async () => {
         const settings = loadGithubSettings();
         const sync = HAS_SOURCE && githubReady(settings);
+
+        // Ancien format de data.js : seulement les ajouts en attente dans ce navigateur (tout ou rien)
+        if (!HAS_SOURCE) {
+            const list = Object.values(customItems).reduce((n, l) => n + l.length, 0);
+            if (!list) { showToast('ℹ️ Aucun ajout en attente à effacer.', false, 5000); return; }
+            showConfirmBox(`Effacer les <strong>${list}</strong> ajout(s) en attente dans ce navigateur ?`, 'Oui, effacer', () => {
+                Object.values(CUSTOM_STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+                location.reload();
+            });
+            return;
+        }
+
+        // 1) Inventaire : ce qui est dans data.js (ou sur GitHub), ce qui est en attente, les modifications en attente
         let inFile = [];
+        const remoteKeys = new Set();   // tout ce qui existe déjà sur GitHub (étiqueté ou non)
         if (sync) {
-            // Avec GitHub : on lit la vraie version en ligne pour lister ce qui sera effacé
             try {
                 const remote = await githubGetFile(settings);
                 const source = extractSource(remote.text);
                 if (!source) throw new Error(GITHUB_FORMAT_ERROR);
                 inFile = findAdminItems(source);
+                const remoteData = new Function('return (' + source + ');')()();
+                Object.keys(remoteData).forEach(category => remoteData[category].forEach(item => remoteKeys.add(category + '|' + itemKey(category, item))));
             } catch (e) {
                 showToast('❌ Lecture de GitHub impossible : ' + e.message, true, 10000);
                 return;
             }
-        } else if (HAS_SOURCE) {
+        } else {
             inFile = findAdminItems(sourceBaseText);
         }
-        const pending = Object.entries(customItems).flatMap(([category, list]) => list.map(item => ({ category, name: item.name })));
-        const pendingEdits = Object.entries(customEdits).flatMap(([category, list]) => list.map(edit => ({ category, name: edit.item.name, edit: true })));
-        // Un élément déjà publié et encore en attente dans ce navigateur ne doit être listé qu'une fois
-        const inFileKeys = new Set(inFile.map(p => p.category + '|' + p.name.toLowerCase()));
-        const all = [...inFile, ...pending.filter(p => !inFileKeys.has(p.category + '|' + p.name.toLowerCase())), ...pendingEdits];
+        const entries = new Map();
+        inFile.forEach(f => entries.set(f.category + '|' + f.key, { category: f.category, key: f.key, name: f.name, state: 'file' }));
+        Object.entries(customItems).forEach(([category, list]) => list.forEach(item => {
+            const id = category + '|' + itemKey(category, item);
+            if (entries.has(id)) entries.get(id).state = 'both';
+            else if (sync && remoteKeys.has(id)) return;   // déjà publié et gardé définitivement : plus concerné
+            else entries.set(id, { category, key: itemKey(category, item), name: item.name, state: 'pending', kept: customKeep.has(id) });
+        }));
+        Object.entries(customEdits).forEach(([category, list]) => list.forEach(edit => {
+            entries.set('edit|' + category + '|' + itemKey(category, edit.item), { category, key: itemKey(category, edit.item), name: edit.item.name, state: 'edit', edit: true });
+        }));
+        const all = [...entries.values()];
         if (!all.length) {
             showToast('ℹ️ Aucun ajout fait via l\'Admin n\'a été trouvé. (Les éléments ajoutés avec une ancienne version de l\'Admin ne sont pas repérables : supprimez leur ligne dans data.js ou restaurez votre sauvegarde.)', false, 10000);
             return;
         }
-        const shown = all.slice(0, 8).map(p => (p.edit ? '✏️ ' : '• ') + escapeHtml(p.name) + (p.edit ? ' (modification)' : '')).join('<br>');
-        const more = all.length > 8 ? `<br>… et ${all.length - 8} autre(s)` : '';
-        const editNote = pendingEdits.length ? '<br><br>Les modifications déjà enregistrées dans data.js ne peuvent pas être annulées ici (restaurez votre sauvegarde pour les retirer).' : '';
-        const note = (!inFile.length ? '' : '')
-            + (!inFile.length ? '' : sync ? '<br><br>Ces éléments seront <strong>supprimés directement sur GitHub</strong> (vos marqueurs sont conservés).'
-            : '<br><br>Un nouveau <strong>data.js sans ces ajouts</strong> sera téléchargé (vos marqueurs sont conservés) : il faudra remplacer votre fichier par celui-ci.') + editNote;
-        showConfirmBox(
-            `Effacer les <strong>${all.length}</strong> élément(s) ajouté(s) ou modifié(s) via l'Admin ?<br><small>${shown}${more}${note}</small>`,
-            !inFile.length ? 'Oui, effacer' : sync ? 'Oui, effacer et publier' : 'Oui, effacer et télécharger data.js',
-            async () => {
-                Object.values(CUSTOM_STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
-                localStorage.removeItem(CUSTOM_EDITS_KEY);
-                Object.keys(customItems).forEach(category => { customItems[category] = []; });
-                Object.keys(customEdits).forEach(category => { customEdits[category] = []; });
-                if (!inFile.length) {
-                    location.reload();
-                    return;
-                }
-                try {
+        const where = sync ? '<br>Les éléments déjà enregistrés seront modifiés <strong>directement sur GitHub</strong> (vos marqueurs sont conservés).'
+            : '<br>Si des éléments déjà enregistrés sont concernés, un nouveau <strong>data.js</strong> sera téléchargé : il faudra remplacer votre fichier par celui-ci.';
+        const editNote = all.some(e => e.edit) ? '<br>Les modifications déjà enregistrées dans data.js ne peuvent pas être annulées ici (restaurez votre sauvegarde).' : '';
+
+        showResetDialog(all, where + editNote, async (action, chosen) => {
+            if (!chosen.length) return;
+            const fileKeys = new Set(chosen.filter(e => !e.edit && e.state !== 'pending').map(e => e.category + '|' + e.key));
+            const pendingChosen = chosen.filter(e => !e.edit && e.state !== 'file');
+            const editsChosen = chosen.filter(e => e.edit);
+            const erase = action === 'erase';
+
+            // 2) Effets locaux (ajouts en attente, modifications en attente, « gardés »)
+            if (erase) {
+                pendingChosen.forEach(e => {
+                    customItems[e.category] = customItems[e.category].filter(item => itemKey(e.category, item) !== e.key);
+                    customKeep.delete(e.category + '|' + e.key);
+                });
+                editsChosen.forEach(e => {
+                    customEdits[e.category] = customEdits[e.category].filter(edit => itemKey(e.category, edit.item) !== e.key);
+                });
+                Object.keys(CUSTOM_STORAGE_KEYS).forEach(category => {
+                    try {
+                        if (customItems[category].length) localStorage.setItem(CUSTOM_STORAGE_KEYS[category], JSON.stringify(customItems[category]));
+                        else localStorage.removeItem(CUSTOM_STORAGE_KEYS[category]);
+                    } catch (e) {}
+                });
+                saveCustomEdits();
+            } else {
+                pendingChosen.forEach(e => customKeep.add(e.category + '|' + e.key));
+            }
+            saveCustomKeep();
+
+            const apply = (text) => erase ? removeAdminItems(text, fileKeys) : untagAdminItems(text, fileKeys);
+            const count = chosen.filter(e => erase || !e.edit).length;
+            const verbDone = erase ? 'effacé(s)' : 'gardé(s) définitivement';
+
+            // 3) Effets sur data.js
+            try {
+                if (fileKeys.size) {
                     if (sync) {
-                        showToast('⏳ Suppression sur GitHub en cours…', false, 3000);
+                        showToast(erase ? '⏳ Suppression sur GitHub en cours…' : '⏳ Validation sur GitHub en cours…', false, 3000);
                         const result = await publishToGithub(settings, remoteText => {
                             const source = extractSource(remoteText);
                             if (!source) throw new Error(GITHUB_FORMAT_ERROR);
-                            return wrapSourceAsFile(removeAdminItems(source));
-                        }, 'Réinitialisation des ajouts faits via l\'Admin');
-                        showToast(`✅ ${all.length} ajout(s) effacé(s) sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.`, false, 10000);
+                            return wrapSourceAsFile(apply(source));
+                        }, erase ? `Suppression de ${fileKeys.size} ajout(s) faits via l'Admin` : `Ajouts validés via l'Admin (${fileKeys.size})`);
+                        showToast(`✅ ${count} élément(s) ${verbDone} sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.`, false, 10000);
                     }
-                    sourceBaseText = removeAdminItems(sourceBaseText);
-                    applyBaseText(sourceBaseText);
+                    sourceBaseText = apply(sourceBaseText);
                     if (!sync) {
-                        downloadTextFile(wrapSourceAsFile(sourceBaseText), 'data.js');
-                        showToast(`✅ ${all.length} ajout(s) effacé(s). Remplacez votre data.js par le fichier téléchargé, puis faites Ctrl+F5.`, false, 10000);
+                        rebuildDataFromSource(true);
+                        downloadDataJs();
+                        showToast(`✅ ${count} élément(s) ${verbDone}. Remplacez votre data.js par le fichier téléchargé, puis faites Ctrl+F5.`, false, 10000);
                     }
-                    renderAdmin(grid);
-                } catch (e) {
-                    console.error(e);
-                    sourceBaseText = removeAdminItems(sourceBaseText);
-                    applyBaseText(sourceBaseText);
-                    downloadTextFile(wrapSourceAsFile(sourceBaseText), 'data.js');
-                    showToast('❌ Publication sur GitHub impossible : ' + e.message + ' Le data.js nettoyé a été téléchargé à la place.', true, 15000);
-                    renderAdmin(grid);
+                } else {
+                    showToast(`✅ ${count} élément(s) ${verbDone}.`, false, 5000);
                 }
+                rebuildDataFromSource(true);
+                renderAdmin(grid);
+            } catch (e) {
+                console.error(e);
+                sourceBaseText = apply(sourceBaseText);
+                rebuildDataFromSource(true);
+                downloadDataJs();
+                showToast('❌ Publication sur GitHub impossible : ' + e.message + ' Le data.js a été téléchargé à la place.', true, 15000);
+                renderAdmin(grid);
             }
-        );
+        });
     });
 }
 
