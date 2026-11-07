@@ -132,7 +132,7 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
 // Pour l'activer, ouvrez le site une fois avec  ?admin=VOTRE_CODE  (ex : https://monsite.github.io/?admin=changez-moi).
 // ⚠️ Ce n'est PAS une sécurité (le code est lisible dans ce fichier) : cela masque simplement le bouton aux visiteurs.
 // Un visiteur ne peut de toute façon rien modifier pour les autres : le site est statique et il n'a aucun accès à votre GitHub.
-const ADMIN_SECRET_CODE = 'MVTMJSUN';   // ← remplacez par votre propre code
+const ADMIN_SECRET_CODE = 'changez-moi';   // ← remplacez par votre propre code
 const ADMIN_FLAG_KEY = 'genshin_admin';
 
 function isAdminMode() {
@@ -524,7 +524,7 @@ function downloadDataJs() {
 const ADMIN_ELEMENTS = ['Pyro', 'Hydro', 'Anémo', 'Électro', 'Dendro', 'Cryo', 'Géo'];
 const ADMIN_POWER_KEYS = [
     ['divin', 'Divin (Vision, par défaut)'], ['gnosis', 'Gnosis'], ['autorité', 'Autorité'],
-    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire'], ['coeur', 'Coeur']
+    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire']
 ];
 const ADMIN_WEAPONS = ['Épée à une main', 'Épée à deux mains', 'Arme d\'hast', 'Arc', 'Catalyseur'];
 const ADMIN_ELEVATIONS = ['ATQ %', 'PV %', 'DÉF %', 'Maîtrise élémentaire', 'Recharge d\'énergie', 'Taux CRIT', 'DGT CRIT',
@@ -1041,18 +1041,32 @@ function stripColorSpans(text) {
     return text.replace(/<span style=['"]color:[^>]*>/gi, '').replace(/<\/span>/gi, '');
 }
 
+// Styles de texte : gras, italique, souligné, barré
+const ADMIN_TEXT_STYLES = [
+    { tag: 'b', label: 'B', title: 'Gras (Ctrl+B)', css: 'font-weight:bold' },
+    { tag: 'i', label: 'I', title: 'Italique (Ctrl+I)', css: 'font-style:italic' },
+    { tag: 'u', label: 'U', title: 'Souligné (Ctrl+U)', css: 'text-decoration:underline' },
+    { tag: 's', label: 'S', title: 'Barré', css: 'text-decoration:line-through' }
+];
+
 function adminToolbarHtml() {
+    const styleButtons = ADMIN_TEXT_STYLES.map(st =>
+        `<button type="button" class="style-btn" data-style="${st.tag}" title="${st.title}" style="${st.css}">${st.label}</button>`
+    ).join('');
     const swatches = ADMIN_COLOR_PRESETS.map(([color, label]) =>
         `<button type="button" class="color-swatch" data-color="${color}" title="${label}" style="background:${color}"></button>`
     ).join('');
     return `
         <div class="admin-toolbar">
+            <span class="admin-toolbar-label">✍️ Style :</span>
+            ${styleButtons}
+            <span class="admin-toolbar-sep"></span>
             <span class="admin-toolbar-label">🎨 Couleur du texte :</span>
             ${swatches}
             <label class="color-custom" title="Choisir une autre couleur">Autre
                 <input type="color" id="adminColorPicker" value="#4a90e2"></label>
             <button type="button" id="adminColorClear" class="admin-btn small">✖ Retirer la couleur</button>
-            <span class="admin-hint-inline">Sélectionnez du texte dans une zone de texte, puis choisissez une couleur.</span>
+            <span class="admin-hint-inline">Sélectionnez du texte dans une zone de texte, puis choisissez un style ou une couleur (un second clic sur un style le retire). Raccourcis : Ctrl+B, Ctrl+I, Ctrl+U.</span>
         </div>`;
 }
 
@@ -1114,6 +1128,79 @@ function clearTextColor() {
     }
 }
 
+// --- STYLES DE TEXTE (gras, italique, souligné, barré) ---
+function getTextTarget() {
+    const ta = adminActiveTextarea;
+    if (!ta || !ta.isConnected) {
+        showToast('Cliquez dans une zone de texte, puis sélectionnez le texte à mettre en forme.', true, 3500);
+        return null;
+    }
+    return ta;
+}
+
+// Le texte HTML est-il équilibré (chaque balise ouverte est refermée dans le bon ordre) ?
+function isBalancedHtml(html) {
+    const stack = [];
+    const re = /<(\/?)(b|i|u|s|span)(?:\s[^>]*)?>/gi;
+    let m;
+    while ((m = re.exec(html))) {
+        const tag = m[2].toLowerCase();
+        if (!m[1]) stack.push(tag);
+        else if (stack.pop() !== tag) return false;
+    }
+    return stack.length === 0;
+}
+
+// Balises (b, i, u, s, span) qui entourent exactement la sélection, de la plus proche à la plus éloignée
+function findWrapperLayers(value, start, end) {
+    const layers = [];
+    let b = start, e = end;
+    for (;;) {
+        const m = value.slice(0, b).match(/<(b|i|u|s|span)(?:\s[^>]*)?>$/i);
+        if (!m) break;
+        const tag = m[1].toLowerCase();
+        const close = `</${tag}>`;
+        if (value.slice(e, e + close.length).toLowerCase() !== close) break;
+        layers.push({ tag, openStart: b - m[0].length, openEnd: b, closeStart: e, closeEnd: e + close.length });
+        b -= m[0].length;
+        e += close.length;
+    }
+    return layers;
+}
+
+// Met / retire un style sur la sélection (sans sélection : insère la balise et place le curseur à l'intérieur)
+function toggleTextStyle(tag) {
+    const ta = getTextTarget();
+    if (!ta) return;
+    const value = ta.value;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const selected = value.slice(start, end);
+    const open = `<${tag}>`, close = `</${tag}>`;
+
+    // 1) La sélection est déjà dans ce style (même avec d'autres balises entre les deux) : on le retire
+    const layer = findWrapperLayers(value, start, end).find(l => l.tag === tag);
+    if (layer) {
+        const inner = value.slice(layer.openEnd, layer.closeStart);
+        replaceTextareaRegion(ta, layer.openStart, layer.closeEnd, inner, start - layer.openEnd, end - layer.openEnd);
+        return;
+    }
+
+    // 2) La sélection contient elle-même tout le style (balises comprises) : on le retire
+    const whole = selected.match(new RegExp(`^<${tag}>([\\s\\S]*)</${tag}>$`, 'i'));
+    if (whole && isBalancedHtml(whole[1])) {
+        replaceTextareaRegion(ta, start, end, whole[1], 0, whole[1].length);
+        return;
+    }
+
+    // 3) Sinon on entoure la sélection (elle ne doit pas couper une balise)
+    if (!isBalancedHtml(selected)) {
+        showToast('❌ La sélection coupe une balise (couleur ou style) : élargissez-la ou réduisez-la.', true, 4500);
+        return;
+    }
+    const inner = selected.replace(new RegExp(`</?${tag}>`, 'gi'), '');   // pas de balise identique imbriquée
+    replaceTextareaRegion(ta, start, end, open + inner + close, open.length, open.length + inner.length);
+}
+
 // Aperçu rendu sous la zone de texte (uniquement si elle contient du HTML)
 function updateAdminPreview(ta) {
     let box = ta.nextElementSibling;
@@ -1149,6 +1236,18 @@ function setupAdminToolbar(form) {
     });
     document.getElementById('adminColorPicker').addEventListener('change', (e) => applyTextColor(e.target.value));
     document.getElementById('adminColorClear').addEventListener('click', clearTextColor);
+    toolbar.querySelectorAll('.style-btn').forEach(btn => {
+        btn.addEventListener('click', () => toggleTextStyle(btn.getAttribute('data-style')));
+    });
+    // Raccourcis comme dans Word : Ctrl+B, Ctrl+I, Ctrl+U (Cmd sur Mac) dans une zone de texte
+    form.addEventListener('keydown', (e) => {
+        if (e.target.tagName !== 'TEXTAREA' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+        const tag = { b: 'b', i: 'i', u: 'u' }[(e.key || '').toLowerCase()];
+        if (!tag) return;
+        e.preventDefault();
+        adminActiveTextarea = e.target;
+        toggleTextStyle(tag);
+    });
 }
 
 function adminStatusHtml() {

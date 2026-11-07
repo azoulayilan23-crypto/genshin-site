@@ -339,3 +339,8 @@ h1 { color: var(--primary-color); margin-bottom: 5px; }
 .reset-note { margin: 0 0 14px 0; }
 .reset-actions { flex-wrap: wrap; }
 .reset-actions .admin-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* --- Barre : styles de texte --- */
+.style-btn { width: 32px; height: 28px; padding: 0; border-radius: 6px; border: 1px solid #3d4263; background: var(--input-bg); color: var(--text-color); cursor: pointer; font-size: 0.95rem; font-family: inherit; }
+.style-btn:hover { border-color: var(--primary-color); }
+.admin-toolbar-sep { width: 1px; height: 22px; background: #3d4263; margin: 0 4px; }
