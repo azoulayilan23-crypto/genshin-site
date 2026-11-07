@@ -524,7 +524,7 @@ function downloadDataJs() {
 const ADMIN_ELEMENTS = ['Pyro', 'Hydro', 'Anémo', 'Électro', 'Dendro', 'Cryo', 'Géo'];
 const ADMIN_POWER_KEYS = [
     ['divin', 'Divin (Vision, par défaut)'], ['gnosis', 'Gnosis'], ['autorité', 'Autorité'],
-    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire']
+    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire'], ['coeur', 'Coeur']
 ];
 const ADMIN_WEAPONS = ['Épée à une main', 'Épée à deux mains', 'Arme d\'hast', 'Arc', 'Catalyseur'];
 const ADMIN_ELEVATIONS = ['ATQ %', 'PV %', 'DÉF %', 'Maîtrise élémentaire', 'Recharge d\'énergie', 'Taux CRIT', 'DGT CRIT',
