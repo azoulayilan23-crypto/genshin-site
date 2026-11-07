@@ -43,6 +43,24 @@ function saveCustomKeep() {
     } catch (e) {}
 }
 
+// Décisions « garder définitivement » / « effacer » prises sur des éléments DÉJÀ dans data.js.
+// Elles restent appliquées après actualisation tant que le data.js chargé (copie locale pas encore remplacée,
+// cache de GitHub Pages…) ne les reflète pas : sans cela, l'ancienne copie ferait « revenir » les éléments.
+const CUSTOM_FILEOPS_KEY = 'genshin_custom_fileops';
+const customFileOps = { untag: new Set(), remove: new Set() };
+function saveCustomFileOps() {
+    try {
+        if (customFileOps.untag.size || customFileOps.remove.size) {
+            localStorage.setItem(CUSTOM_FILEOPS_KEY, JSON.stringify({ untag: [...customFileOps.untag], remove: [...customFileOps.remove] }));
+        } else {
+            localStorage.removeItem(CUSTOM_FILEOPS_KEY);
+        }
+    } catch (e) {}
+}
+function applyFileOps(text) {
+    return untagAdminItems(removeAdminItems(text, customFileOps.remove), customFileOps.untag);
+}
+
 function sameItem(a, b) {
     const norm = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]]));
     return norm(a) === norm(b);
@@ -76,6 +94,17 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
     Object.keys(customItems).forEach(category => customItems[category].forEach(item => pendingKeys.add(category + '|' + itemKey(category, item))));
     savedKeep.filter(key => pendingKeys.has(key)).forEach(key => customKeep.add(key));
     saveCustomKeep();
+
+    if (HAS_SOURCE) {
+        // Décisions « garder » / « effacer » : conservées tant que l'élément est encore étiqueté dans le data.js chargé
+        let savedOps = {};
+        try { savedOps = JSON.parse(localStorage.getItem(CUSTOM_FILEOPS_KEY)) || {}; } catch (e) {}
+        const taggedNow = new Set(scanAdminLines(sourceBaseText).found.map(f => f.category + '|' + f.key));
+        (savedOps.untag || []).filter(key => taggedNow.has(key)).forEach(key => customFileOps.untag.add(key));
+        (savedOps.remove || []).filter(key => taggedNow.has(key)).forEach(key => customFileOps.remove.add(key));
+        saveCustomFileOps();
+        if (customFileOps.untag.size || customFileOps.remove.size) sourceBaseText = applyFileOps(sourceBaseText);
+    }
 
     if (HAS_SOURCE) {
         // Modifications en attente : on retire celles que data.js contient déjà
@@ -397,7 +426,8 @@ function getBaseData() {
 }
 
 function hasPendingChanges() {
-    return Object.values(customItems).some(list => list.length) || Object.values(customEdits).some(list => list.length);
+    return Object.values(customItems).some(list => list.length) || Object.values(customEdits).some(list => list.length)
+        || customFileOps.untag.size > 0 || customFileOps.remove.size > 0;
 }
 
 function buildSourceText() {
@@ -853,8 +883,9 @@ const GITHUB_FORMAT_ERROR = 'le data.js sur GitHub n\'est pas au format à marqu
 
 // Applique au texte source distant les modifications puis les ajouts en attente qui n'y sont pas encore
 function applyPendingToSource(sourceText, stats) {
-    const known = new Function('return (' + sourceText + ');')()();
-    let text = applyEditsToSource(sourceText, stats);
+    const afterOps = applyFileOps(sourceText);
+    const known = new Function('return (' + afterOps + ');')()();
+    let text = applyEditsToSource(afterOps, stats);
     Object.keys(customItems).forEach(category => {
         const keys = new Set((known[category] || []).map(item => itemKey(category, item)));
         customItems[category].forEach(item => {
@@ -1513,7 +1544,7 @@ function renderAdmin(grid) {
                 const remote = await githubGetFile(settings);
                 const source = extractSource(remote.text);
                 if (!source) throw new Error(GITHUB_FORMAT_ERROR);
-                inFile = findAdminItems(source);
+                inFile = findAdminItems(applyFileOps(source));
                 const remoteData = new Function('return (' + source + ');')()();
                 Object.keys(remoteData).forEach(category => remoteData[category].forEach(item => remoteKeys.add(category + '|' + itemKey(category, item))));
             } catch (e) {
@@ -1572,6 +1603,12 @@ function renderAdmin(grid) {
             saveCustomKeep();
 
             const apply = (text) => erase ? removeAdminItems(text, fileKeys) : untagAdminItems(text, fileKeys);
+            // On mémorise la décision : elle survit à l'actualisation tant que data.js ne la reflète pas
+            fileKeys.forEach(key => {
+                if (erase) { customFileOps.remove.add(key); customFileOps.untag.delete(key); }
+                else { customFileOps.untag.add(key); customFileOps.remove.delete(key); }
+            });
+            saveCustomFileOps();
             const count = chosen.filter(e => erase || !e.edit).length;
             const verbDone = erase ? 'effacé(s)' : 'gardé(s) définitivement';
 
