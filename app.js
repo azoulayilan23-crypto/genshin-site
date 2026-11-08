@@ -169,15 +169,19 @@ function escapeHtml(text) {
 // Boîte de choix : on coche les éléments, puis on les efface ou on les garde définitivement
 function showResetDialog(entries, noteHtml, onChoose) {
     const stateLabel = e => e.edit ? (e.published ? 'modification déjà publiée' : 'modification en attente') + (e.kept ? ', gardée définitivement' : '') : e.state === 'pending' ? (e.kept ? 'en attente, gardé définitivement' : 'en attente, pas encore publié') : 'déjà enregistré dans data.js';
+    const keptCount = entries.filter(e => e.kept).length;
+    const visibleCount = entries.length - keptCount;
     const overlay = document.createElement('div');
     overlay.className = 'confirm-overlay';
     overlay.innerHTML = `<div class="confirm-box reset-box">
-        <p><strong>Éléments ajoutés ou modifiés via l'Admin</strong><br><small>Cochez ceux qui vous intéressent (rien n'est coché par défaut).</small></p>
+        <p><strong>Éléments ajoutés ou modifiés via l'Admin</strong><br><small>Cochez ceux qui vous intéressent (rien n'est coché par défaut). Ceux que vous avez déjà gardés définitivement sont masqués.</small></p>
         <div class="reset-tools">
             <button type="button" class="admin-btn small" data-act="all">Tout cocher</button>
             <button type="button" class="admin-btn small" data-act="none">Tout décocher</button>
+            ${keptCount ? `<button type="button" class="admin-btn small" data-act="toggle-kept">Afficher les ${keptCount} déjà gardé(s)</button>` : ''}
         </div>
-        <div class="reset-list">${entries.map((e, i) => `<label class="reset-item">
+        ${visibleCount ? '' : '<p class="reset-empty"><small>Rien à réinitialiser : tout ce qui a été ajouté ou modifié est déjà validé.</small></p>'}
+        <div class="reset-list">${entries.map((e, i) => `<label class="reset-item${e.kept ? ' reset-kept' : ''}">
             <input type="checkbox" data-idx="${i}"><span>${e.edit ? '✏️ ' : ''}${escapeHtml(e.name)}</span>
             <small>${escapeHtml(ADMIN_CATEGORIES[e.category].switchLabel)} · ${stateLabel(e)}</small></label>`).join('')}</div>
         <p class="reset-note"><small>🗑️ <strong>Effacer</strong> : supprime l'ajout, ou annule la modification (l'élément reprend sa version d'origine).<br>
@@ -188,7 +192,8 @@ function showResetDialog(entries, noteHtml, onChoose) {
             <button type="button" class="admin-btn" data-act="cancel">Annuler</button>
         </div></div>`;
     const boxes = () => [...overlay.querySelectorAll('input[type="checkbox"]')];
-    const selected = () => boxes().filter(c => c.checked).map(c => entries[Number(c.getAttribute('data-idx'))]);
+    const isShown = c => overlay.classList.contains('show-kept') || !c.closest('.reset-item').classList.contains('reset-kept');
+    const selected = () => boxes().filter(c => c.checked && isShown(c)).map(c => entries[Number(c.getAttribute('data-idx'))]);
     const refresh = () => {
         const chosen = selected();
         const eraseBtn = overlay.querySelector('[data-act="erase"]');
@@ -202,7 +207,13 @@ function showResetDialog(entries, noteHtml, onChoose) {
     overlay.addEventListener('change', refresh);
     overlay.addEventListener('click', (e) => {
         const act = e.target.getAttribute && e.target.getAttribute('data-act');
-        if (act === 'all' || act === 'none') { boxes().forEach(c => { c.checked = act === 'all'; }); refresh(); }
+        if (act === 'all' || act === 'none') { boxes().filter(isShown).forEach(c => { c.checked = act === 'all'; }); refresh(); }
+        else if (act === 'toggle-kept') {
+            const on = overlay.classList.toggle('show-kept');
+            e.target.textContent = on ? `Masquer les ${keptCount} déjà gardé(s)` : `Afficher les ${keptCount} déjà gardé(s)`;
+            if (!on) boxes().filter(c => !isShown(c)).forEach(c => { c.checked = false; });
+            refresh();
+        }
         else if (act === 'erase' || act === 'keep') { const chosen = selected(); overlay.remove(); onChoose(act, chosen); }
         else if (act === 'cancel' || e.target === overlay) overlay.remove();
     });
