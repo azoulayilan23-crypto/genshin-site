@@ -132,7 +132,7 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
 // Pour l'activer, ouvrez le site une fois avec  ?admin=VOTRE_CODE  (ex : https://monsite.github.io/?admin=changez-moi).
 // ⚠️ Ce n'est PAS une sécurité (le code est lisible dans ce fichier) : cela masque simplement le bouton aux visiteurs.
 // Un visiteur ne peut de toute façon rien modifier pour les autres : le site est statique et il n'a aucun accès à votre GitHub.
-const ADMIN_SECRET_CODE = 'MVTMJSUN';   // ← remplacez par votre propre code
+const ADMIN_SECRET_CODE = 'changez-moi';   // ← remplacez par votre propre code
 const ADMIN_FLAG_KEY = 'genshin_admin';
 
 function isAdminMode() {
@@ -168,7 +168,7 @@ function escapeHtml(text) {
 
 // Boîte de choix : on coche les éléments, puis on les efface ou on les garde définitivement
 function showResetDialog(entries, noteHtml, onChoose) {
-    const stateLabel = e => e.edit ? 'modification en attente' : e.state === 'pending' ? (e.kept ? 'en attente, gardé définitivement' : 'en attente, pas encore publié') : 'déjà enregistré dans data.js';
+    const stateLabel = e => e.edit ? (e.published ? 'modification déjà publiée' : 'modification en attente') + (e.kept ? ', gardée définitivement' : '') : e.state === 'pending' ? (e.kept ? 'en attente, gardé définitivement' : 'en attente, pas encore publié') : 'déjà enregistré dans data.js';
     const overlay = document.createElement('div');
     overlay.className = 'confirm-overlay';
     overlay.innerHTML = `<div class="confirm-box reset-box">
@@ -180,8 +180,8 @@ function showResetDialog(entries, noteHtml, onChoose) {
         <div class="reset-list">${entries.map((e, i) => `<label class="reset-item">
             <input type="checkbox" data-idx="${i}"><span>${e.edit ? '✏️ ' : ''}${escapeHtml(e.name)}</span>
             <small>${escapeHtml(ADMIN_CATEGORIES[e.category].switchLabel)} · ${stateLabel(e)}</small></label>`).join('')}</div>
-        <p class="reset-note"><small>🗑️ <strong>Effacer</strong> : supprime l'élément (ou annule la modification en attente).<br>
-        ✅ <strong>Garder définitivement</strong> : retire l'étiquette « ajouté via Admin » ; « Réinitialiser » ne le touchera plus.${noteHtml}</small></p>
+        <p class="reset-note"><small>🗑️ <strong>Effacer</strong> : supprime l'ajout, ou annule la modification (l'élément reprend sa version d'origine).<br>
+        ✅ <strong>Garder définitivement</strong> : valide l'ajout (l'étiquette « ajouté via Admin » est retirée) ou la modification ; « Réinitialiser » ne la touchera plus.${noteHtml}</small></p>
         <div class="confirm-actions reset-actions">
             <button type="button" class="admin-btn primary" data-act="erase" disabled>🗑️ Effacer les éléments cochés</button>
             <button type="button" class="admin-btn" data-act="keep" disabled>✅ Garder définitivement</button>
@@ -195,7 +195,7 @@ function showResetDialog(entries, noteHtml, onChoose) {
         const keepBtn = overlay.querySelector('[data-act="keep"]');
         eraseBtn.disabled = !chosen.length;
         eraseBtn.textContent = chosen.length ? `🗑️ Effacer les ${chosen.length} élément(s) coché(s)` : '🗑️ Effacer les éléments cochés';
-        const keepable = chosen.filter(e => !e.edit);
+        const keepable = chosen.filter(e => !e.kept);
         keepBtn.disabled = !keepable.length;
         keepBtn.textContent = keepable.length ? `✅ Garder définitivement (${keepable.length})` : '✅ Garder définitivement';
     };
@@ -237,7 +237,7 @@ function showToast(message, isError = false, duration = 3000) {
 }
 
 function getCharacterElement(item) {
-    return item.divin || item.gnosis || item.lunaire || item.stellaire || item.serpent || item.trilunaire || item.autorité || item.coeur;
+    return item.divin || item.gnosis || item.lunaire || item.stellaire || item.serpent || item.trilunaire || item.autorité;
 }
 
 // --- EXPORT DE data.js ---
@@ -416,6 +416,21 @@ function applyEditsToSource(text, stats) {
     return text;
 }
 
+// Annule des modifications déjà présentes dans un texte source : l'élément reprend sa version d'origine.
+// Si la version du texte a changé depuis (modifiée ailleurs), on n'y touche pas.
+function revertEditsInSource(text, reverts) {
+    const base = getBaseData();
+    reverts.forEach(({ category, edit }) => {
+        const original = (base[category] || []).find(item => itemKey(category, item) === edit.originalKey);
+        if (!original) return;
+        const located = findItemLine(text.split(/\r?\n/), category, itemKey(category, edit.item));
+        if (!located || !sameItem(located.item, edit.item)) return;
+        const replaced = replaceItemInSource(text, category, itemKey(category, edit.item), original);
+        if (replaced) text = replaced;
+    });
+    return text;
+}
+
 // Données d'origine (sans aucune modification en attente), pour comparer
 let baseDataCache = { text: null, data: null };
 function getBaseData() {
@@ -524,7 +539,7 @@ function downloadDataJs() {
 const ADMIN_ELEMENTS = ['Pyro', 'Hydro', 'Anémo', 'Électro', 'Dendro', 'Cryo', 'Géo'];
 const ADMIN_POWER_KEYS = [
     ['divin', 'Divin (Vision, par défaut)'], ['gnosis', 'Gnosis'], ['autorité', 'Autorité'],
-    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire'], ['coeur', 'Coeur'],
+    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire']
 ];
 const ADMIN_WEAPONS = ['Épée à une main', 'Épée à deux mains', 'Arme d\'hast', 'Arc', 'Catalyseur'];
 const ADMIN_ELEVATIONS = ['ATQ %', 'PV %', 'DÉF %', 'Maîtrise élémentaire', 'Recharge d\'énergie', 'Taux CRIT', 'DGT CRIT',
@@ -1638,6 +1653,7 @@ function renderAdmin(grid) {
         // 1) Inventaire : ce qui est dans data.js (ou sur GitHub), ce qui est en attente, les modifications en attente
         let inFile = [];
         const remoteKeys = new Set();   // tout ce qui existe déjà sur GitHub (étiqueté ou non)
+        const remoteItems = new Map();  // et la version en ligne de chacun
         if (sync) {
             try {
                 const remote = await githubGetFile(settings);
@@ -1645,7 +1661,7 @@ function renderAdmin(grid) {
                 if (!source) throw new Error(GITHUB_FORMAT_ERROR);
                 inFile = findAdminItems(applyFileOps(source));
                 const remoteData = new Function('return (' + source + ');')()();
-                Object.keys(remoteData).forEach(category => remoteData[category].forEach(item => remoteKeys.add(category + '|' + itemKey(category, item))));
+                Object.keys(remoteData).forEach(category => remoteData[category].forEach(item => { const id = category + '|' + itemKey(category, item); remoteKeys.add(id); remoteItems.set(id, item); }));
             } catch (e) {
                 showToast('❌ Lecture de GitHub impossible : ' + e.message, true, 10000);
                 return;
@@ -1662,16 +1678,20 @@ function renderAdmin(grid) {
             else entries.set(id, { category, key: itemKey(category, item), name: item.name, state: 'pending', kept: customKeep.has(id) });
         }));
         Object.entries(customEdits).forEach(([category, list]) => list.forEach(edit => {
-            entries.set('edit|' + category + '|' + itemKey(category, edit.item), { category, key: itemKey(category, edit.item), name: edit.item.name, state: 'edit', edit: true });
+            const key = itemKey(category, edit.item);
+            const online = remoteItems.get(category + '|' + key);
+            const published = !!(sync && online && sameItem(online, edit.item));   // la version en ligne est déjà la modifiée
+            if (edit.kept && published) return;                                     // validée et déjà publiée : plus concernée
+            entries.set('edit|' + category + '|' + key, { category, key, name: edit.item.name, state: 'edit', edit: true, kept: !!edit.kept, published });
         }));
         const all = [...entries.values()];
         if (!all.length) {
-            showToast('ℹ️ Aucun ajout fait via l\'Admin n\'a été trouvé. (Les éléments ajoutés avec une ancienne version de l\'Admin ne sont pas repérables : supprimez leur ligne dans data.js ou restaurez votre sauvegarde.)', false, 10000);
+            showToast('ℹ️ Rien à réinitialiser ni à valider : tout ce qui a été ajouté ou modifié via l\'Admin est déjà validé. (Les éléments ajoutés avec une ancienne version de l\'Admin ne sont pas repérables : supprimez leur ligne dans data.js ou restaurez votre sauvegarde.)', false, 10000);
             return;
         }
         const where = sync ? '<br>Les éléments déjà enregistrés seront modifiés <strong>directement sur GitHub</strong> (vos marqueurs sont conservés).'
             : '<br>Si des éléments déjà enregistrés sont concernés, un nouveau <strong>data.js</strong> sera téléchargé : il faudra remplacer votre fichier par celui-ci.';
-        const editNote = all.some(e => e.edit) ? '<br>Les modifications déjà enregistrées dans data.js ne peuvent pas être annulées ici (restaurez votre sauvegarde).' : '';
+        const editNote = all.some(e => e.edit) ? '<br>Une modification déjà présente dans votre data.js (fichier remplacé) ne peut plus être annulée ici : restaurez votre sauvegarde.' : '';
 
         showResetDialog(all, where + editNote, async (action, chosen) => {
             if (!chosen.length) return;
@@ -1681,12 +1701,15 @@ function renderAdmin(grid) {
             const erase = action === 'erase';
 
             // 2) Effets locaux (ajouts en attente, modifications en attente, « gardés »)
+            const revertRecords = [];
             if (erase) {
                 pendingChosen.forEach(e => {
                     customItems[e.category] = customItems[e.category].filter(item => itemKey(e.category, item) !== e.key);
                     customKeep.delete(e.category + '|' + e.key);
                 });
                 editsChosen.forEach(e => {
+                    const record = customEdits[e.category].find(edit => itemKey(e.category, edit.item) === e.key);
+                    if (record && e.published) revertRecords.push({ category: e.category, edit: record });   // déjà en ligne : à annuler aussi sur GitHub
                     customEdits[e.category] = customEdits[e.category].filter(edit => itemKey(e.category, edit.item) !== e.key);
                 });
                 Object.keys(CUSTOM_STORAGE_KEYS).forEach(category => {
@@ -1698,6 +1721,11 @@ function renderAdmin(grid) {
                 saveCustomEdits();
             } else {
                 pendingChosen.forEach(e => customKeep.add(e.category + '|' + e.key));
+                editsChosen.forEach(e => {
+                    const record = customEdits[e.category].find(edit => itemKey(e.category, edit.item) === e.key);
+                    if (record) record.kept = true;   // modification validée
+                });
+                saveCustomEdits();
             }
             saveCustomKeep();
 
@@ -1708,22 +1736,25 @@ function renderAdmin(grid) {
                 else { customFileOps.untag.add(key); customFileOps.remove.delete(key); }
             });
             saveCustomFileOps();
-            const count = chosen.filter(e => erase || !e.edit).length;
+            const count = chosen.length;
             const verbDone = erase ? 'effacé(s)' : 'gardé(s) définitivement';
 
             // 3) Effets sur data.js
             try {
-                if (fileKeys.size) {
+                if (fileKeys.size || (sync && revertRecords.length)) {
                     if (sync) {
                         showToast(erase ? '⏳ Suppression sur GitHub en cours…' : '⏳ Validation sur GitHub en cours…', false, 3000);
+                        const message = revertRecords.length
+                            ? `Annulation de ${revertRecords.length} modification(s)${fileKeys.size ? ` et suppression de ${fileKeys.size} ajout(s)` : ''} via l'Admin`
+                            : (erase ? `Suppression de ${fileKeys.size} ajout(s) faits via l'Admin` : `Ajouts validés via l'Admin (${fileKeys.size})`);
                         const result = await publishToGithub(settings, remoteText => {
                             const source = extractSource(remoteText);
                             if (!source) throw new Error(GITHUB_FORMAT_ERROR);
-                            return wrapSourceAsFile(apply(source));
-                        }, erase ? `Suppression de ${fileKeys.size} ajout(s) faits via l'Admin` : `Ajouts validés via l'Admin (${fileKeys.size})`);
+                            return wrapSourceAsFile(revertEditsInSource(apply(source), revertRecords));
+                        }, message);
                         showToast(`✅ ${count} élément(s) ${verbDone} sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.`, false, 10000);
                     }
-                    sourceBaseText = apply(sourceBaseText);
+                    if (fileKeys.size) sourceBaseText = apply(sourceBaseText);
                     if (!sync) {
                         rebuildDataFromSource(true);
                         downloadDataJs();
