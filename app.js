@@ -61,6 +61,39 @@ function applyFileOps(text) {
     return untagAdminItems(removeAdminItems(text, customFileOps.remove), customFileOps.untag);
 }
 
+// Suivi des changements en attente déjà publiés sur GitHub (pour dire clairement ce qui n'est visible que chez vous)
+const CUSTOM_PUBLISHED_KEY = 'genshin_custom_published';
+const customPublished = new Set();
+let publishing = false;
+function saveCustomPublished() {
+    try {
+        if (customPublished.size) localStorage.setItem(CUSTOM_PUBLISHED_KEY, JSON.stringify([...customPublished]));
+        else localStorage.removeItem(CUSTOM_PUBLISHED_KEY);
+    } catch (e) {}
+}
+
+// Signature d'un changement : change si son contenu change (une nouvelle modification = à republier)
+function changeSignature(kind, category, item) {
+    const json = JSON.stringify(Object.keys(item).sort().map(k => [k, item[k]]));
+    let hash = 5381;
+    for (let i = 0; i < json.length; i++) hash = ((hash << 5) + hash + json.charCodeAt(i)) | 0;
+    return `${kind}|${category}|${itemKey(category, item)}|${hash}`;
+}
+
+function listPendingChanges() {
+    const list = [];
+    Object.keys(customItems).forEach(category => customItems[category].forEach(item =>
+        list.push({ kind: 'add', category, name: item.name, sig: changeSignature('add', category, item) })));
+    Object.keys(customEdits).forEach(category => customEdits[category].forEach(edit =>
+        list.push({ kind: 'edit', category, name: edit.item.name, sig: changeSignature('edit', category, edit.item) })));
+    return list;
+}
+
+function markPendingPublished(includeEdits) {
+    listPendingChanges().forEach(change => { if (change.kind === 'add' || includeEdits) customPublished.add(change.sig); });
+    saveCustomPublished();
+}
+
 function sameItem(a, b) {
     const norm = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]]));
     return norm(a) === norm(b);
@@ -119,6 +152,13 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
             });
         });
         saveCustomEdits();
+    }
+    if (HAS_SOURCE) {
+        let savedPublished = [];
+        try { savedPublished = JSON.parse(localStorage.getItem(CUSTOM_PUBLISHED_KEY)) || []; } catch (e) {}
+        const currentSigs = new Set(listPendingChanges().map(change => change.sig));
+        savedPublished.filter(sig => currentSigs.has(sig)).forEach(sig => customPublished.add(sig));
+        saveCustomPublished();
     }
     if (!rebuildDataFromSource()) {
         // Ancien format de data.js (sans marqueurs) : ajout en fin de liste
@@ -942,6 +982,8 @@ async function publishToGithub(settings, transform, message) {
 async function publishPending(commitMessage, label, verb = 'publié') {
     const settings = loadGithubSettings();
     const stats = { edited: 0, skipped: 0 };
+    publishing = true;
+    renderSyncBanner();
     try {
         const result = await publishToGithub(settings, remoteText => {
             stats.edited = 0; stats.skipped = 0;   // la transformation peut être rejouée après un conflit
@@ -949,12 +991,26 @@ async function publishPending(commitMessage, label, verb = 'publié') {
             if (!source) throw new Error(GITHUB_FORMAT_ERROR);
             return wrapSourceAsFile(applyPendingToSource(source, stats));
         }, commitMessage);
+        markPendingPublished(stats.skipped === 0);   // si une modification a été ignorée, elle n'est pas publiée
         const warn = stats.skipped ? ` ⚠️ ${stats.skipped} modification(s) ignorée(s) : élément introuvable sur GitHub.` : '';
         showToast(`✅ ${label} ${verb} sur GitHub${result.sha ? ' (commit ' + result.sha.slice(0, 7) + ')' : ''}. Le site se met à jour dans 1 à 2 minutes.${warn}`, false, 10000);
     } catch (e) {
         downloadDataJs();
         showToast('❌ Publication sur GitHub impossible : ' + e.message + ' Le data.js a été téléchargé à la place.', true, 15000);
+    } finally {
+        publishing = false;
+        renderSyncBanner();
     }
+}
+
+// Publie tous les changements en attente (bouton du bandeau)
+async function publishNow() {
+    if (!githubReady(loadGithubSettings())) {
+        showToast('❌ La publication automatique n\'est pas activée dans ce navigateur : renseignez le dépôt et le jeton dans « ☁️ Publication automatique sur GitHub ».', true, 8000);
+        return;
+    }
+    showToast('⏳ Publication sur GitHub en cours…', false, 3000);
+    await publishPending('Publication des changements en attente via l\'Admin', 'Les changements en attente', 'publiés');
 }
 
 async function publishAddition(item) {
@@ -1523,6 +1579,7 @@ function setupEditPicker(grid) {
 
 function renderAdmin(grid) {
     grid.classList.remove('talents-view');
+    renderSyncBanner();
 
     const editing = HAS_SOURCE && adminMode === 'edit';
     if (!editing) adminEditTarget = null;
@@ -1788,9 +1845,48 @@ function renderAdmin(grid) {
     });
 }
 
+// Bandeau en haut du site (mode admin) : dit si des changements ne sont visibles que dans ce navigateur
+function renderSyncBanner() {
+    const main = document.querySelector('.main-content');
+    if (!main) return;
+    let banner = document.getElementById('syncBanner');
+    const changes = (isAdminMode() && HAS_SOURCE) ? listPendingChanges() : [];
+    if (!changes.length && !publishing) { if (banner) banner.remove(); return; }
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'syncBanner';
+        main.insertBefore(banner, main.firstChild);
+    }
+    const unpublished = changes.filter(change => !customPublished.has(change.sig));
+    const names = list => list.slice(0, 4).map(c => '« ' + escapeHtml(c.name) + ' »').join(', ') + (list.length > 4 ? ` … (+${list.length - 4})` : '');
+
+    if (publishing) {
+        banner.className = 'sync-banner info';
+        banner.innerHTML = '<span>⏳ <strong>Publication sur GitHub en cours…</strong></span>';
+    } else if (unpublished.length) {
+        const sync = githubReady(loadGithubSettings());
+        banner.className = 'sync-banner warn';
+        banner.innerHTML = `<span>⚠️ <strong>${unpublished.length} changement(s) visible(s) seulement par vous</strong> : ${names(unpublished)}.<br>
+            <small>Ils sont stockés dans ce navigateur : les autres visiteurs (navigation privée, autre compte) ne les voient pas tant qu'ils ne sont pas dans le data.js en ligne.
+            ${sync ? '' : 'La publication automatique n\'est pas activée dans ce navigateur (les réglages sont propres à chaque navigateur et à chaque adresse). '}
+            Si vous venez de mettre votre data.js en ligne, patientez quelques minutes : ce message disparaît tout seul.</small></span>
+            ${sync ? '<button type="button" id="publishNowBtn" class="admin-btn small primary">📤 Publier maintenant sur GitHub</button>'
+                   : '<button type="button" id="bannerDownloadBtn" class="admin-btn small primary">⬇️ Télécharger data.js</button>'}`;
+        const publishBtn = document.getElementById('publishNowBtn');
+        if (publishBtn) publishBtn.addEventListener('click', publishNow);
+        const downloadBtn = document.getElementById('bannerDownloadBtn');
+        if (downloadBtn) downloadBtn.addEventListener('click', downloadDataJs);
+    } else {
+        banner.className = 'sync-banner info';
+        banner.innerHTML = `<span>⏳ <strong>${changes.length} changement(s) publié(s) sur GitHub</strong> : ${names(changes)}.<br>
+            <small>Visibles par tous d'ici quelques minutes (GitHub Pages peut garder l'ancienne version jusqu'à ~10 min). Ce message disparaît tout seul quand le site en ligne est à jour.</small></span>`;
+    }
+}
+
 function render() {
     const grid = document.getElementById('mainGrid');
     if (!grid) return;
+    renderSyncBanner();
     if (currentTab === 'admin' && !isAdminMode()) currentTab = 'characters';
     const controls = document.getElementById('controlsContainer');
     if (controls) controls.style.display = (currentTab === 'admin') ? 'none' : 'flex';
@@ -2201,6 +2297,7 @@ function setupControls() {
             document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
             e.target.classList.add('active');
             currentTab = e.target.getAttribute('data-tab');
+            window.scrollTo({ top: 0 });   // on revient en haut (bandeau de publication, nouvel élément…)
             
             const elemFilters = document.getElementById('elementFilters');
             const weaponFilters = document.getElementById('weaponTypeFilters');
