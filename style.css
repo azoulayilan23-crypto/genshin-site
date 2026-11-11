@@ -355,3 +355,5 @@ h1 { color: var(--primary-color); margin-bottom: 5px; }
 .sync-banner small { color: #c9ccd6; }
 .sync-banner.warn { background: rgba(231, 76, 60, 0.15); border: 1px solid #e74c3c; }
 .sync-banner.info { background: rgba(74, 144, 226, 0.12); border: 1px solid var(--primary-color); }
+
+.sync-actions { display: flex; gap: 8px; flex-wrap: wrap; }

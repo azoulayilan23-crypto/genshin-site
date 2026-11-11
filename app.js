@@ -13,18 +13,46 @@ const CUSTOM_STORAGE_KEYS = {
     artifacts: 'genshin_custom_artifacts'
 };
 
-// Clé d'identité : un artéfact existe en 4★ et en 5★ avec le même nom, donc nom + type + rareté.
+// Noms portés par plusieurs personnages (Aether et Lumine : un par élément) : pour eux, l'identité inclut l'élément.
+const characterDuplicateNames = new Set();
+function refreshDuplicateNames(data) {
+    characterDuplicateNames.clear();
+    const count = {};
+    ((data && data.characters) || []).forEach(item => {
+        const name = (item.name || '').trim().toLowerCase();
+        count[name] = (count[name] || 0) + 1;
+    });
+    Object.entries(count).forEach(([name, n]) => { if (n > 1) characterDuplicateNames.add(name); });
+}
+
+// Clé d'identité : un artéfact existe en 4★ et en 5★ avec le même nom, donc nom + type + rareté ;
+// les 7 « Aether » (et 7 « Lumine ») se distinguent par leur élément.
 function itemKey(category, item) {
     const name = (item.name || '').trim().toLowerCase();
     if (category === 'artifacts') return [name, (item.type || '').trim().toLowerCase(), item.rarity].join('|');
+    if (category === 'characters' && characterDuplicateNames.has(name)) return name + '|' + String(getCharacterElement(item) || '').trim().toLowerCase();
     return name;
 }
+
+// Nom affiché dans les listes : « Aether (Cryo) » quand plusieurs personnages portent le même nom
+function displayName(category, item) {
+    const name = item.name || '';
+    if (category === 'characters' && characterDuplicateNames.has(name.trim().toLowerCase())) {
+        const element = getCharacterElement(item);
+        return element ? `${name} (${element})` : name;
+    }
+    return name;
+}
+
+if (typeof LOCAL_GENSHIN_DATA !== 'undefined') refreshDuplicateNames(LOCAL_GENSHIN_DATA);
 
 // data.js au nouveau format : « const LOCAL_GENSHIN_SOURCE = () => ({ ... }) ». Son texte (commentaires
 // « //Pour Claude » compris) est lisible avec .toString(), ce qui permet d'insérer les ajouts aux marqueurs.
 const HAS_SOURCE = typeof LOCAL_GENSHIN_SOURCE === 'function';
 // Texte de data.js servant de base (remplacé après une réinitialisation, avant que le fichier soit remplacé)
 let sourceBaseText = HAS_SOURCE ? LOCAL_GENSHIN_SOURCE.toString() : '';
+// Texte de data.js tel qu'il a été chargé (sert à savoir si le fichier en ligne est plus récent)
+let loadedSourceText = sourceBaseText;
 
 const customItems = { characters: [], weapons: [], artifacts: [] };
 
@@ -83,15 +111,25 @@ function changeSignature(kind, category, item) {
 function listPendingChanges() {
     const list = [];
     Object.keys(customItems).forEach(category => customItems[category].forEach(item =>
-        list.push({ kind: 'add', category, name: item.name, sig: changeSignature('add', category, item) })));
+        list.push({ kind: 'add', category, name: displayName(category, item), key: itemKey(category, item), item, sig: changeSignature('add', category, item) })));
     Object.keys(customEdits).forEach(category => customEdits[category].forEach(edit =>
-        list.push({ kind: 'edit', category, name: edit.item.name, sig: changeSignature('edit', category, edit.item) })));
+        list.push({ kind: 'edit', category, name: displayName(category, edit.item), key: itemKey(category, edit.item), item: edit.item, sig: changeSignature('edit', category, edit.item) })));
     return list;
 }
 
 function markPendingPublished(includeEdits) {
     listPendingChanges().forEach(change => { if (change.kind === 'add' || includeEdits) customPublished.add(change.sig); });
     saveCustomPublished();
+}
+
+// Une modification en attente créée avant ce correctif pointe sur « aether » (ambigu) : on retrouve la bonne variante
+function migrateLegacyEdit(category, edit) {
+    if (category !== 'characters' || !edit || !edit.item || typeof edit.originalKey !== 'string') return edit;
+    if (edit.originalKey.includes('|') || !characterDuplicateNames.has(edit.originalKey)) return edit;
+    const element = String(getCharacterElement(edit.item) || '').trim().toLowerCase();
+    const candidates = (LOCAL_GENSHIN_DATA.characters || []).filter(item => (item.name || '').trim().toLowerCase() === edit.originalKey);
+    const chosen = candidates.find(item => String(getCharacterElement(item) || '').trim().toLowerCase() === element) || candidates[0];
+    return chosen ? Object.assign({}, edit, { originalKey: itemKey('characters', chosen) }) : edit;
 }
 
 function sameItem(a, b) {
@@ -145,7 +183,7 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
         try { savedEdits = JSON.parse(localStorage.getItem(CUSTOM_EDITS_KEY)) || {}; } catch (e) {}
         Object.keys(customEdits).forEach(category => {
             const baseMap = new Map((LOCAL_GENSHIN_DATA[category] || []).map(item => [itemKey(category, item), item]));
-            customEdits[category] = (savedEdits[category] || []).filter(edit => {
+            customEdits[category] = (savedEdits[category] || []).map(edit => migrateLegacyEdit(category, edit)).filter(edit => {
                 if (!edit || !edit.item || !edit.item.name) return false;
                 const current = baseMap.get(itemKey(category, edit.item));
                 return !(current && sameItem(current, edit.item));
@@ -328,13 +366,13 @@ function scanAdminLines(text) {
         const m = line.match(/^(\s*)(\{.*\})(\s*,?)((?:\s*\/\/.*)?)\s*$/);
         if (m) { try { item = new Function('return (' + m[2] + ');')(); } catch (e) {} }
         const name = item && item.name ? String(item.name) : '(sans nom)';
-        found.push({ index, category, name, key: item ? itemKey(category, item) : name.trim().toLowerCase() });
+        found.push({ index, category, name, display: item ? displayName(category, item) : name, key: item ? itemKey(category, item) : name.trim().toLowerCase() });
     });
     return { lines, found };
 }
 
 function findAdminItems(text) {
-    return scanAdminLines(text).found.map(({ category, name, key }) => ({ category, name, key }));
+    return scanAdminLines(text).found.map(({ category, name, display, key }) => ({ category, name: display || name, key }));
 }
 
 // keys : ensemble de « catégorie|clé » à traiter (sans argument : toutes les lignes étiquetées)
@@ -1332,12 +1370,31 @@ function setupAdminToolbar(form) {
     });
 }
 
+// Éléments dont l'identité apparaît plusieurs fois (signe qu'une ligne a pu être écrasée par erreur)
+function duplicateIdentities() {
+    const out = [];
+    Object.keys(LOCAL_GENSHIN_DATA).forEach(category => {
+        const seen = new Map();
+        (LOCAL_GENSHIN_DATA[category] || []).forEach(item => {
+            if (!item.name || item.name === 'Non renseigné') return;
+            const key = itemKey(category, item);
+            seen.set(key, { n: (seen.get(key) ? seen.get(key).n : 0) + 1, label: displayName(category, item) });
+        });
+        seen.forEach(({ n, label }) => { if (n > 1) out.push({ category, label, n }); });
+    });
+    return out;
+}
+
 function adminStatusHtml() {
     if (HAS_SOURCE) {
         const n = countMarkers(sourceBaseText);
-        return n
+        const dups = duplicateIdentities();
+        const dupHtml = dups.length
+            ? `<p class="admin-status warn">⚠️ <strong>Doublon dans data.js</strong> : ${dups.slice(0, 5).map(d => `« ${escapeHtml(d.label)} » (×${d.n})`).join(', ')}.<br><small>Cela arrive quand une ligne a été écrasée par la modification d'un homonyme. Comparez ces lignes à votre sauvegarde.</small></p>`
+            : '';
+        return (n
             ? `<p class="admin-status ok">✅ Marqueurs « //Pour Claude » actifs : ${n} détecté(s) dans data.js. Les ajouts y sont insérés automatiquement.</p>`
-            : `<p class="admin-status warn">⚠️ Aucun marqueur « //Pour Claude » trouvé dans data.js : les ajouts seront placés en fin de liste.</p>`;
+            : `<p class="admin-status warn">⚠️ Aucun marqueur « //Pour Claude » trouvé dans data.js : les ajouts seront placés en fin de liste.</p>`) + dupHtml;
     }
     return `<div class="admin-status warn">
         <p>⚠️ <strong>data.js à l'ancien format</strong> : les marqueurs « //Pour Claude » ne sont pas utilisés, les ajouts vont en fin de liste, et le téléchargement est bloqué pour ne pas effacer vos commentaires.</p>
@@ -1743,14 +1800,14 @@ function renderAdmin(grid) {
             const id = category + '|' + itemKey(category, item);
             if (entries.has(id)) entries.get(id).state = 'both';
             else if (sync && remoteKeys.has(id)) return;   // déjà publié et gardé définitivement : plus concerné
-            else entries.set(id, { category, key: itemKey(category, item), name: item.name, state: 'pending', kept: customKeep.has(id) });
+            else entries.set(id, { category, key: itemKey(category, item), name: displayName(category, item), state: 'pending', kept: customKeep.has(id) });
         }));
         Object.entries(customEdits).forEach(([category, list]) => list.forEach(edit => {
             const key = itemKey(category, edit.item);
             const online = remoteItems.get(category + '|' + key);
             const published = !!(sync && online && sameItem(online, edit.item));   // la version en ligne est déjà la modifiée
             if (edit.kept && published) return;                                     // validée et déjà publiée : plus concernée
-            entries.set('edit|' + category + '|' + key, { category, key, name: edit.item.name, state: 'edit', edit: true, kept: !!edit.kept, published });
+            entries.set('edit|' + category + '|' + key, { category, key, name: displayName(category, edit.item), state: 'edit', edit: true, kept: !!edit.kept, published });
         }));
         const all = [...entries.values()];
         if (!all.length) {
@@ -1845,6 +1902,98 @@ function renderAdmin(grid) {
     });
 }
 
+// --- VÉRIFICATION DE LA MISE EN LIGNE (site ouvert en http/https, ex. github.io) ---
+// Le navigateur peut garder une ancienne copie de data.js plusieurs minutes. On recharge donc data.js en contournant ce cache,
+// on regarde si vos changements y sont, et on retire de la liste d'attente ceux qui sont déjà en ligne.
+let liveCheck = { time: null, states: {}, error: null, running: false };
+let liveTimer = null;
+
+function canCheckLive() {
+    return /^https?:$/.test(location.protocol);
+}
+
+function diffFields(a, b) {
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+}
+
+// Adopte le data.js en ligne (plus récent) et retire les changements qu'il contient déjà
+function adoptLiveSource(source) {
+    const data = new Function('return (' + source + ');')()();
+    refreshDuplicateNames(data);
+    const taggedNow = new Set(scanAdminLines(source).found.map(f => f.category + '|' + f.key));
+    ['untag', 'remove'].forEach(kind => {
+        [...customFileOps[kind]].forEach(key => { if (!taggedNow.has(key)) customFileOps[kind].delete(key); });
+    });
+    saveCustomFileOps();
+
+    Object.keys(customItems).forEach(category => {
+        const known = new Set((data[category] || []).map(item => itemKey(category, item)));
+        customItems[category] = customItems[category].filter(item => !known.has(itemKey(category, item)));
+        try {
+            if (customItems[category].length) localStorage.setItem(CUSTOM_STORAGE_KEYS[category], JSON.stringify(customItems[category]));
+            else localStorage.removeItem(CUSTOM_STORAGE_KEYS[category]);
+        } catch (e) {}
+    });
+    Object.keys(customEdits).forEach(category => {
+        const byKey = new Map((data[category] || []).map(item => [itemKey(category, item), item]));
+        customEdits[category] = customEdits[category].filter(edit => {
+            const current = byKey.get(itemKey(category, edit.item));
+            return !(current && sameItem(current, edit.item));
+        });
+    });
+    saveCustomEdits();
+
+    const pendingKeys = new Set();
+    Object.keys(customItems).forEach(category => customItems[category].forEach(item => pendingKeys.add(category + '|' + itemKey(category, item))));
+    [...customKeep].forEach(key => { if (!pendingKeys.has(key)) customKeep.delete(key); });
+    saveCustomKeep();
+    const sigs = new Set(listPendingChanges().map(change => change.sig));
+    [...customPublished].forEach(sig => { if (!sigs.has(sig)) customPublished.delete(sig); });
+    saveCustomPublished();
+
+    loadedSourceText = source;
+    sourceBaseText = applyFileOps(source);
+    rebuildDataFromSource(true);
+    if (currentTab !== 'admin') render();   // on ne réaffiche pas le formulaire Admin en cours de saisie
+}
+
+async function checkLiveData() {
+    if (!HAS_SOURCE || !isAdminMode() || !canCheckLive() || liveCheck.running) return;
+    if (!listPendingChanges().length) return;
+    liveCheck.running = true;
+    liveCheck.error = null;
+    renderSyncBanner();
+    try {
+        const res = await fetch('data.js', { cache: 'reload' });   // contourne le cache du navigateur (et le met à jour)
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const source = extractSource(await res.text());
+        if (!source) throw new Error('format de data.js non reconnu');
+        const live = new Function('return (' + source + ');')()();
+        const states = {};
+        listPendingChanges().forEach(change => {
+            const found = (live[change.category] || []).find(item => itemKey(change.category, item) === change.key);
+            if (!found) states[change.sig] = { state: 'missing' };
+            else if (change.kind === 'add' || sameItem(found, change.item)) states[change.sig] = { state: 'live' };
+            else states[change.sig] = { state: 'different', fields: diffFields(found, change.item) };
+        });
+        liveCheck.states = states;
+        liveCheck.time = new Date();
+        if (source !== loadedSourceText) adoptLiveSource(source);
+    } catch (e) {
+        liveCheck.error = e.message;
+        liveCheck.time = new Date();
+    } finally {
+        liveCheck.running = false;
+        renderSyncBanner();
+    }
+}
+
+function startLiveWatch() {
+    if (liveTimer || !HAS_SOURCE || !isAdminMode() || !canCheckLive()) return;
+    setTimeout(checkLiveData, 1500);
+    liveTimer = setInterval(() => { if (document.visibilityState === 'visible') checkLiveData(); }, 60000);
+}
+
 // Bandeau en haut du site (mode admin) : dit si des changements ne sont visibles que dans ce navigateur
 function renderSyncBanner() {
     const main = document.querySelector('.main-content');
@@ -1877,9 +2026,29 @@ function renderSyncBanner() {
         const downloadBtn = document.getElementById('bannerDownloadBtn');
         if (downloadBtn) downloadBtn.addEventListener('click', downloadDataJs);
     } else {
+        const checkable = canCheckLive();
+        const differing = changes.filter(c => liveCheck.states[c.sig] && liveCheck.states[c.sig].state === 'different');
+        const time = liveCheck.time ? liveCheck.time.toLocaleTimeString('fr-FR') : '';
+        const sync = githubReady(loadGithubSettings());
+        const checkLine = !checkable
+            ? 'Vous ouvrez le site depuis un fichier local : ce message ne disparaîtra qu\'une fois votre data.js local remplacé par celui de GitHub. Ouvrez plutôt l\'adresse github.io.'
+            : liveCheck.running ? '🔎 Vérification en cours…'
+            : liveCheck.error ? `Dernière vérification (${time}) impossible : ${escapeHtml(liveCheck.error)}.`
+            : time ? `Dernière vérification à ${time} : pas encore en ligne. Nouvelle vérification automatique toutes les minutes.`
+            : 'Vérification automatique toutes les minutes.';
+        const differNote = differing.length
+            ? `<br>⚠️ <strong>Présent en ligne mais avec un contenu différent</strong> : ${names(differing)} (champs : ${escapeHtml([...new Set(differing.flatMap(c => liveCheck.states[c.sig].fields))].join(', '))}). Republiez pour remplacer la version en ligne.`
+            : '';
         banner.className = 'sync-banner info';
         banner.innerHTML = `<span>⏳ <strong>${changes.length} changement(s) publié(s) sur GitHub</strong> : ${names(changes)}.<br>
-            <small>Visibles par tous d'ici quelques minutes (GitHub Pages peut garder l'ancienne version jusqu'à ~10 min). Ce message disparaît tout seul quand le site en ligne est à jour.</small></span>`;
+            <small>Visibles par tous d'ici quelques minutes (GitHub Pages peut garder l'ancienne version jusqu'à ~10 min). Ce message disparaît tout seul quand le site en ligne est à jour.<br>${checkLine}${differNote}</small></span>
+            <span class="sync-actions">
+            ${checkable && !liveCheck.running ? '<button type="button" id="checkLiveBtn" class="admin-btn small">🔎 Vérifier maintenant</button>' : ''}
+            ${differing.length && sync ? '<button type="button" id="publishNowBtn" class="admin-btn small primary">📤 Republier</button>' : ''}</span>`;
+        const checkBtn = document.getElementById('checkLiveBtn');
+        if (checkBtn) checkBtn.addEventListener('click', checkLiveData);
+        const publishBtn = document.getElementById('publishNowBtn');
+        if (publishBtn) publishBtn.addEventListener('click', publishNow);
     }
 }
 
@@ -2411,8 +2580,10 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         setupControls();
         render();
+        startLiveWatch();
     });
 } else {
     setupControls();
     render();
+    startLiveWatch();
 }
