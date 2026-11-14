@@ -357,3 +357,22 @@ h1 { color: var(--primary-color); margin-bottom: 5px; }
 .sync-banner.info { background: rgba(74, 144, 226, 0.12); border: 1px solid var(--primary-color); }
 
 .sync-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* --- Mots-clés jaunes soulignés et panneau « Effets associés » --- */
+.kw { color: #ffd479; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; cursor: pointer; }
+.kw:hover { color: #ffe8b0; }
+.effects-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); z-index: 1500; display: flex; justify-content: center; align-items: center; }
+.effects-box { position: relative; width: min(460px, 92vw); max-height: 86vh; overflow-y: auto; background: #1d2733; border: 1px solid #3a4756; border-radius: 14px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.55); text-align: left; }
+.effects-title { text-align: center; margin: 0 0 14px 0; color: #8d9aaa; font-size: 1.05rem; letter-spacing: 1px; }
+.effects-close { position: absolute; top: 8px; right: 14px; background: none; border: 0; color: #aab4c0; font-size: 1.8rem; cursor: pointer; line-height: 1; }
+.effects-close:hover { color: #fff; }
+.effect-item { background: rgba(255, 255, 255, 0.04); border: 1px solid #3a4756; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.effect-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; background: none; border: 0; color: #f1f3f6; font-weight: bold; font-size: 1rem; cursor: pointer; text-align: left; font-family: inherit; }
+.effect-chevron { display: inline-block; transform: rotate(180deg); color: #8d9aaa; transition: transform 0.2s; }
+.effect-item.open .effect-chevron { transform: rotate(0deg); }
+.effect-body { display: none; padding: 0 14px 14px 14px; color: #e3e8ee; line-height: 1.55; font-size: 0.95rem; }
+.effect-item.open .effect-body { display: block; }
+.effects-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 15px 0 15px; text-align: left; font-size: 0.85rem; color: #8a8f98; }
+.effect-chip { background: transparent; border: 1px solid #5a4a22; color: #ffd479; border-radius: 14px; padding: 3px 10px; font-size: 0.82rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font-family: inherit; }
+.effect-chip:hover { background: rgba(255, 212, 121, 0.12); }
+.admin-toolbar select.kw-select { width: auto; max-width: 260px; padding: 6px 10px; font-size: 0.85rem; }

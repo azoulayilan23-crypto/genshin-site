@@ -210,7 +210,7 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
 // Pour l'activer, ouvrez le site une fois avec  ?admin=VOTRE_CODE  (ex : https://monsite.github.io/?admin=changez-moi).
 // ⚠️ Ce n'est PAS une sécurité (le code est lisible dans ce fichier) : cela masque simplement le bouton aux visiteurs.
 // Un visiteur ne peut de toute façon rien modifier pour les autres : le site est statique et il n'a aucun accès à votre GitHub.
-const ADMIN_SECRET_CODE = 'MVTMJSUN';   // ← remplacez par votre propre code
+const ADMIN_SECRET_CODE = 'changez-moi';   // ← remplacez par votre propre code
 const ADMIN_FLAG_KEY = 'genshin_admin';
 
 function isAdminMode() {
@@ -326,7 +326,7 @@ function showToast(message, isError = false, duration = 3000) {
 }
 
 function getCharacterElement(item) {
-    return item.divin || item.gnosis || item.lunaire || item.stellaire || item.serpent || item.trilunaire || item.autorité || item.coeur;
+    return item.divin || item.gnosis || item.lunaire || item.stellaire || item.serpent || item.trilunaire || item.autorité;
 }
 
 // --- EXPORT DE data.js ---
@@ -628,7 +628,7 @@ function downloadDataJs() {
 const ADMIN_ELEMENTS = ['Pyro', 'Hydro', 'Anémo', 'Électro', 'Dendro', 'Cryo', 'Géo'];
 const ADMIN_POWER_KEYS = [
     ['divin', 'Divin (Vision, par défaut)'], ['gnosis', 'Gnosis'], ['autorité', 'Autorité'],
-    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire'], ['coeur', 'Coeur'],
+    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire']
 ];
 const ADMIN_WEAPONS = ['Épée à une main', 'Épée à deux mains', 'Arme d\'hast', 'Arc', 'Catalyseur'];
 const ADMIN_ELEVATIONS = ['ATQ %', 'PV %', 'DÉF %', 'Maîtrise élémentaire', 'Recharge d\'énergie', 'Taux CRIT', 'DGT CRIT',
@@ -688,6 +688,7 @@ function adminTextareaField(key, label, rows = 3, extra = '') {
 }
 
 // --- LIEN D'ICÔNE : construit à partir du type choisi + de la partie saisie à la main ---
+const MAX_EFFECTS = 6;   // effets associés par personnage (effet1…effet6 / effetdesc1…effetdesc6)
 const ADMIN_ICON_BASE = 'https://enka.network/ui/';
 const ADMIN_WEAPON_ICON_TOKENS = { 'Épée à une main': 'Sword', 'Épée à deux mains': 'Claymore', 'Arme d\'hast': 'Pole', 'Arc': 'Bow', 'Catalyseur': 'Catalyst' };
 const ADMIN_ARTIFACT_ICON_SUFFIX = { 'Coupe d\'éonothème': 1, 'Plume de la mort': 2, 'Diadème de Logos': 3, 'Fleur de la vie': 4, 'Sables du temps': 5 };
@@ -792,6 +793,9 @@ function adminCharacterFormHtml() {
     const constellationsHtml = [1, 2, 3, 4, 5, 6]
         .map(n => adminBlock('c' + n, `c${n}desc`, `Constellation niv. ${n}`, 'Nom')).join('');
 
+    const effectsHtml = Array.from({ length: MAX_EFFECTS }, (_, i) =>
+        adminBlock('effet' + (i + 1), 'effetdesc' + (i + 1), 'Effet associé n°' + (i + 1), 'Nom (ex : Finesse serpentine)')).join('');
+
     const powerOptions = ADMIN_POWER_KEYS.map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
 
     return `
@@ -820,6 +824,12 @@ function adminCharacterFormHtml() {
             <summary>🌟 Constellations (facultatif)</summary>
             <p class="admin-hint">Visibles dans l'onglet « Constellation » (au minimum la niveau 1).</p>
             <div class="admin-grid">${constellationsHtml}</div>
+        </details>
+
+        <details class="admin-section">
+            <summary>🔖 Effets associés (facultatif)</summary>
+            <p class="admin-hint">Comme dans le jeu : des mots en <span class='kw'>jaune souligné</span> dans les textes ouvrent ce panneau au clic. Définissez ici chaque effet (nom + description), puis sélectionnez un mot dans un texte et choisissez l'effet avec « 🔖 Mot-clé » dans la barre d'outils.</p>
+            <div class="admin-grid">${effectsHtml}</div>
         </details>`;
 }
 
@@ -834,6 +844,10 @@ function collectCharacter(val) {
     ['anniversaire', 'nation', 'affiliation', 'constellation', 'description'].forEach(k => { item[k] = val(k); });
     ADMIN_TALENTS.forEach(([nk, dk]) => { item[nk] = val(nk); item[dk] = val(dk); });
     [1, 2, 3, 4, 5, 6].forEach(n => { item['c' + n] = val('c' + n); item[`c${n}desc`] = val(`c${n}desc`); });
+    for (let n = 1; n <= MAX_EFFECTS; n++) {
+        if (val('effet' + n)) item['effet' + n] = val('effet' + n);
+        if (val('effetdesc' + n)) item['effetdesc' + n] = val('effetdesc' + n);
+    }
     ['infocomp', 'infoult'].forEach(k => { if (val(k)) item[k] = val(k); });
     return item;
 }
@@ -1157,9 +1171,29 @@ function newlinesToBr(value) {
         .replace(/\r?\n/g, '<br>');
 }
 
-function stripColorSpans(text) {
-    return text.replace(/<span style=['"]color:[^>]*>/gi, '').replace(/<\/span>/gi, '');
+// Retire les <span> qui répondent au test ; le </span> retiré est toujours celui du <span> retiré (les autres restent)
+function stripSpans(html, shouldRemove) {
+    const re = /<(\/?)span\b[^>]*>/gi;
+    const stack = [];
+    const parts = [];
+    let last = 0, m;
+    while ((m = re.exec(html))) {
+        parts.push(html.slice(last, m.index));
+        last = m.index + m[0].length;
+        if (!m[1]) {
+            const remove = shouldRemove(m[0]);
+            stack.push(remove);
+            if (!remove) parts.push(m[0]);
+        } else {
+            const remove = stack.pop();
+            if (remove === undefined || !remove) parts.push(m[0]);
+        }
+    }
+    parts.push(html.slice(last));
+    return parts.join('');
 }
+function stripColorSpans(text) { return stripSpans(text, tag => /style=['"]color:/i.test(tag)); }
+function stripKeywordSpans(text) { return stripSpans(text, tag => /class=['"]kw['"]/i.test(tag)); }
 
 // Styles de texte : gras, italique, souligné, barré
 const ADMIN_TEXT_STYLES = [
@@ -1169,7 +1203,7 @@ const ADMIN_TEXT_STYLES = [
     { tag: 's', label: 'S', title: 'Barré', css: 'text-decoration:line-through' }
 ];
 
-function adminToolbarHtml() {
+function adminToolbarHtml(category) {
     const styleButtons = ADMIN_TEXT_STYLES.map(st =>
         `<button type="button" class="style-btn" data-style="${st.tag}" title="${st.title}" style="${st.css}">${st.label}</button>`
     ).join('');
@@ -1186,6 +1220,9 @@ function adminToolbarHtml() {
             <label class="color-custom" title="Choisir une autre couleur">Autre
                 <input type="color" id="adminColorPicker" value="#4a90e2"></label>
             <button type="button" id="adminColorClear" class="admin-btn small">✖ Retirer la couleur</button>
+            ${category === 'characters' ? `<span class="admin-toolbar-sep"></span>
+            <select id="adminKeywordSelect" class="kw-select" title="Rend le texte sélectionné jaune, souligné et cliquable : il ouvre l'effet associé choisi"><option value="">🔖 Mot-clé (définissez d'abord un effet)</option></select>
+            <button type="button" id="adminKeywordClear" class="admin-btn small">✖ Retirer le mot-clé</button>` : ''}
             <span class="admin-hint-inline">Sélectionnez du texte dans une zone de texte, puis choisissez un style ou une couleur (un second clic sur un style le retire). Raccourcis : Ctrl+B, Ctrl+I, Ctrl+U.</span>
         </div>`;
 }
@@ -1221,6 +1258,7 @@ function findColorWrapper(ta) {
 function applyTextColor(color) {
     const ta = getColorTarget();
     if (!ta) return;
+    if (selectionCutsTag(ta.value, ta.selectionStart, ta.selectionEnd)) { showToast(CUT_TAG_MESSAGE, true, 5000); return; }
     const start = ta.selectionStart, end = ta.selectionEnd;
     const open = `<span style='color: ${color};'>`;
     const wrapper = findColorWrapper(ta);
@@ -1237,6 +1275,7 @@ function applyTextColor(color) {
 function clearTextColor() {
     const ta = getColorTarget();
     if (!ta) return;
+    if (selectionCutsTag(ta.value, ta.selectionStart, ta.selectionEnd)) { showToast(CUT_TAG_MESSAGE, true, 5000); return; }
     const start = ta.selectionStart, end = ta.selectionEnd;
     const wrapper = findColorWrapper(ta);
     if (wrapper) {
@@ -1256,6 +1295,16 @@ function getTextTarget() {
         return null;
     }
     return ta;
+}
+
+const CUT_TAG_MESSAGE = '❌ La sélection coupe une balise (couleur, style ou mot-clé) : élargissez-la ou réduisez-la pour qu\'elle commence et finisse hors des balises.';
+
+// Le début ou la fin de la sélection tombe-t-il à l'intérieur d'une balise <...> ?
+function selectionCutsTag(value, start, end) {
+    return [start, end].some(pos => {
+        if (pos <= 0) return false;
+        return value.lastIndexOf('<', pos - 1) > value.lastIndexOf('>', pos - 1);
+    });
 }
 
 // Le texte HTML est-il équilibré (chaque balise ouverte est refermée dans le bon ordre) ?
@@ -1281,7 +1330,7 @@ function findWrapperLayers(value, start, end) {
         const tag = m[1].toLowerCase();
         const close = `</${tag}>`;
         if (value.slice(e, e + close.length).toLowerCase() !== close) break;
-        layers.push({ tag, openStart: b - m[0].length, openEnd: b, closeStart: e, closeEnd: e + close.length });
+        layers.push({ tag, openText: m[0], openStart: b - m[0].length, openEnd: b, closeStart: e, closeEnd: e + close.length });
         b -= m[0].length;
         e += close.length;
     }
@@ -1292,6 +1341,7 @@ function findWrapperLayers(value, start, end) {
 function toggleTextStyle(tag) {
     const ta = getTextTarget();
     if (!ta) return;
+    if (selectionCutsTag(ta.value, ta.selectionStart, ta.selectionEnd)) { showToast(CUT_TAG_MESSAGE, true, 5000); return; }
     const value = ta.value;
     const start = ta.selectionStart, end = ta.selectionEnd;
     const selected = value.slice(start, end);
@@ -1319,6 +1369,73 @@ function toggleTextStyle(tag) {
     }
     const inner = selected.replace(new RegExp(`</?${tag}>`, 'gi'), '');   // pas de balise identique imbriquée
     replaceTextareaRegion(ta, start, end, open + inner + close, open.length, open.length + inner.length);
+}
+
+// --- MOTS-CLÉS (jaune souligné, ouvrent le panneau « Effets associés ») ---
+function keywordOpenTag(name) {
+    return `<span class='kw' data-effet='${String(name).replace(/'/g, '&#39;')}'>`;
+}
+
+function isKeywordLayer(layer) {
+    return layer.tag === 'span' && /class=['"]kw['"]/i.test(layer.openText);
+}
+
+// Marque la sélection comme mot-clé lié à un effet (sans sélection : balise vide, curseur à l'intérieur)
+function applyKeyword(name) {
+    const ta = getTextTarget();
+    if (!ta) return;
+    if (selectionCutsTag(ta.value, ta.selectionStart, ta.selectionEnd)) { showToast(CUT_TAG_MESSAGE, true, 5000); return; }
+    const value = ta.value;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const selected = value.slice(start, end);
+    const open = keywordOpenTag(name);
+
+    const layer = findWrapperLayers(value, start, end).find(isKeywordLayer);
+    if (layer) {
+        // déjà un mot-clé : on change seulement l'effet visé
+        replaceTextareaRegion(ta, layer.openStart, layer.openEnd, open, open.length + (start - layer.openEnd), open.length + (end - layer.openEnd));
+        return;
+    }
+    if (!isBalancedHtml(selected)) {
+        showToast('❌ La sélection coupe une balise (couleur, style ou mot-clé) : élargissez-la ou réduisez-la.', true, 4500);
+        return;
+    }
+    const inner = stripKeywordSpans(selected);
+    replaceTextareaRegion(ta, start, end, open + inner + '</span>', open.length, open.length + inner.length);
+}
+
+function clearKeyword() {
+    const ta = getTextTarget();
+    if (!ta) return;
+    if (selectionCutsTag(ta.value, ta.selectionStart, ta.selectionEnd)) { showToast(CUT_TAG_MESSAGE, true, 5000); return; }
+    const value = ta.value;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const layer = findWrapperLayers(value, start, end).find(isKeywordLayer);
+    if (layer) {
+        const inner = value.slice(layer.openEnd, layer.closeStart);
+        replaceTextareaRegion(ta, layer.openStart, layer.closeEnd, inner, start - layer.openEnd, end - layer.openEnd);
+        return;
+    }
+    const inner = stripKeywordSpans(value.slice(start, end));
+    replaceTextareaRegion(ta, start, end, inner, 0, inner.length);
+}
+
+// Liste des effets définis dans le formulaire (noms saisis), proposée par le menu « Mot-clé »
+function refreshKeywordOptions(form) {
+    const select = form.querySelector('#adminKeywordSelect');
+    if (!select) return;
+    const names = [...form.querySelectorAll('input[data-key^="effet"]')].map(el => el.value.trim()).filter(Boolean);
+    select.innerHTML = '';
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = names.length ? '🔖 Mot-clé : choisir l\'effet…' : '🔖 Mot-clé (définissez d\'abord un effet)';
+    select.appendChild(first);
+    names.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+    });
 }
 
 // Aperçu rendu sous la zone de texte (uniquement si elle contient du HTML)
@@ -1356,6 +1473,18 @@ function setupAdminToolbar(form) {
     });
     document.getElementById('adminColorPicker').addEventListener('change', (e) => applyTextColor(e.target.value));
     document.getElementById('adminColorClear').addEventListener('click', clearTextColor);
+    const kwSelect = document.getElementById('adminKeywordSelect');
+    if (kwSelect) {
+        ['mousedown', 'focus'].forEach(type => kwSelect.addEventListener(type, () => refreshKeywordOptions(form)));
+        kwSelect.addEventListener('change', () => {
+            const name = kwSelect.value;
+            if (name) applyKeyword(name);
+            kwSelect.value = '';
+        });
+        refreshKeywordOptions(form);
+    }
+    const kwClear = document.getElementById('adminKeywordClear');
+    if (kwClear) kwClear.addEventListener('click', clearKeyword);
     toolbar.querySelectorAll('.style-btn').forEach(btn => {
         btn.addEventListener('click', () => toggleTextStyle(btn.getAttribute('data-style')));
     });
@@ -1508,6 +1637,7 @@ function makeFormVal(form, ctx) {
 function mergeEditedItem(original, collected) {
     const POWER = ADMIN_POWER_KEYS.map(([k]) => k);
     const OPTIONAL = ['infocomp', 'infoult'];
+    for (let n = 1; n <= MAX_EFFECTS; n++) OPTIONAL.push('effet' + n, 'effetdesc' + n);
     const result = {};
     const origPower = POWER.find(k => k in original);
     const newPower = POWER.find(k => k in collected);
@@ -1580,6 +1710,7 @@ function prefillForm(form, category, item) {
         setText('description');
         ADMIN_TALENTS.forEach(([nk, dk]) => { setField(nk, item[nk]); setText(dk); });
         [1, 2, 3, 4, 5, 6].forEach(n => { setField('c' + n, item['c' + n]); setText(`c${n}desc`); });
+        for (let n = 1; n <= MAX_EFFECTS; n++) { setField('effet' + n, item['effet' + n]); setText('effetdesc' + n); }
         setText('infocomp');
         setText('infoult');
     } else if (category === 'weapons') {
@@ -1676,7 +1807,7 @@ function renderAdmin(grid) {
             <p class="admin-hint">Dans les zones de texte, la touche Entrée crée un retour à la ligne (converti automatiquement en &lt;br&gt;). Le HTML reste accepté si vous préférez l'écrire à la main.</p>
             <form id="adminAddForm" class="admin-form"${showForm ? '' : ' style="display:none"'}>
                 ${bannerHtml}
-                ${adminToolbarHtml()}
+                ${adminToolbarHtml(adminCategory)}
                 ${formHtml}
                 <div class="admin-actions">
                     <button type="submit" class="admin-btn primary">${editing ? '💾 Enregistrer les modifications' : '➕ ' + ADMIN_CATEGORIES[adminCategory].saveLabel}</button>
@@ -2052,6 +2183,82 @@ function renderSyncBanner() {
     }
 }
 
+// --- MOTS-CLÉS JAUNES SOULIGNÉS ET PANNEAU « EFFETS ASSOCIÉS » ---
+function normalizeText(text) {
+    return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+// Effets associés d'un personnage : { nom, desc }, jusqu'à MAX_EFFECTS
+function getCharacterEffects(item) {
+    const list = [];
+    for (let n = 1; n <= MAX_EFFECTS; n++) {
+        const nom = item['effet' + n];
+        if (nom && String(nom).trim()) list.push({ nom: String(nom).trim(), desc: item['effetdesc' + n] || '' });
+    }
+    return list;
+}
+
+function closeEffectsPopup() {
+    const popup = document.getElementById('effectsPopup');
+    if (popup) popup.remove();
+}
+
+// Ouvre le panneau « Effets associés » du personnage, avec l'effet demandé déplié
+function openEffectsPopup(item, effectName) {
+    const effects = getCharacterEffects(item);
+    if (!effects.length) {
+        showToast('Aucun effet associé n\'est défini pour ce personnage.', true, 3500);
+        return;
+    }
+    const wanted = normalizeText(effectName);
+    let index = effects.findIndex(effect => normalizeText(effect.nom) === wanted);
+    if (index < 0) index = 0;   // mot-clé sans effet correspondant : on ouvre sur le premier
+    const ownerKey = itemKey('characters', item);
+
+    const existing = document.getElementById('effectsPopup');
+    if (existing && existing.querySelector('.effects-box').getAttribute('data-owner-key') === ownerKey) {
+        // déjà ouvert pour ce personnage (clic sur un mot-clé dans un effet) : on déplie l'effet visé
+        const target = existing.querySelectorAll('.effect-item')[index];
+        if (target) { target.classList.add('open'); target.scrollIntoView({ block: 'nearest' }); }
+        return;
+    }
+    closeEffectsPopup();
+    const overlay = document.createElement('div');
+    overlay.id = 'effectsPopup';
+    overlay.className = 'effects-overlay';
+    overlay.innerHTML = `<div class="effects-box" data-owner-key="${escapeHtml(ownerKey)}">
+        <button type="button" class="effects-close" aria-label="Fermer">&times;</button>
+        <h3 class="effects-title">Effets associés</h3>
+        <div class="effects-list">${effects.map((effect, i) => `<div class="effect-item${i === index ? ' open' : ''}">
+            <button type="button" class="effect-head"><span>${escapeHtml(effect.nom)}</span><span class="effect-chevron">⌃</span></button>
+            <div class="effect-body">${effect.desc || '<em>Aucune description.</em>'}</div></div>`).join('')}</div></div>`;
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('.effects-close')) { closeEffectsPopup(); return; }
+        const head = e.target.closest('.effect-head');
+        if (head) head.parentElement.classList.toggle('open');
+    });
+    document.body.appendChild(overlay);
+    const opened = overlay.querySelector('.effect-item.open');
+    if (opened) opened.scrollIntoView({ block: 'nearest' });
+}
+
+// Clic sur un mot-clé (ou une pastille d'effet) : on ouvre le panneau au lieu d'ouvrir la fiche de la carte
+document.addEventListener('click', (e) => {
+    const target = e.target.closest ? e.target.closest('.kw, .effect-chip') : null;
+    if (!target) return;
+    const owner = target.closest('[data-owner-key]');
+    if (!owner) return;   // aperçu de l'Admin : pas de personnage associé
+    const item = (LOCAL_GENSHIN_DATA.characters || []).find(c => itemKey('characters', c) === owner.getAttribute('data-owner-key'));
+    if (!item) return;
+    e.stopPropagation();
+    e.preventDefault();
+    openEffectsPopup(item, target.getAttribute('data-effet'));
+}, true);
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeEffectsPopup();
+});
+
 function render() {
     const grid = document.getElementById('mainGrid');
     if (!grid) return;
@@ -2119,6 +2326,7 @@ function render() {
     filtered.forEach(item => {
         const card = document.createElement('div');
         card.className = `card stars-${item.rarity || 3}`;
+        if (currentTab === 'characters' || currentTab === 'talents' || currentTab === 'constellations') card.setAttribute('data-owner-key', itemKey('characters', item));
 
         if (currentTab === 'characters') {
             if (!item.name || item.name === 'Non renseigné') {
@@ -2257,6 +2465,12 @@ function render() {
                 `;
             }
 
+            const effects = getCharacterEffects(item);
+            if (effects.length) {
+                cardHTML += `<div class="effects-chips"><span>🔖 Effets associés :</span> ${effects.map(effect =>
+                    `<button type="button" class="effect-chip" data-effet="${escapeHtml(effect.nom)}">${escapeHtml(effect.nom)}</button>`).join('')}</div>`;
+            }
+
             card.innerHTML = cardHTML;
             card.addEventListener('click', () => openDetails(item, 'characters'));
         }
@@ -2366,6 +2580,8 @@ function openDetails(item, type) {
     const modal = document.getElementById('detailsModal');
     const body = document.getElementById('modalBody');
     if (!modal || !body) return;
+    if (type === 'characters') body.setAttribute('data-owner-key', itemKey('characters', item));
+    else body.removeAttribute('data-owner-key');
 
     let htmlContent = '';
 
