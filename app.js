@@ -828,7 +828,7 @@ function adminCharacterFormHtml() {
 
         <details class="admin-section">
             <summary>🔖 Effets associés (facultatif)</summary>
-            <p class="admin-hint">Comme dans le jeu : des mots en <span class='kw'>jaune souligné</span> dans les textes ouvrent ce panneau au clic. Définissez ici chaque effet (nom + description), puis sélectionnez un mot dans un texte et choisissez l'effet avec « 🔖 Mot-clé » dans la barre d'outils.</p>
+            <p class="admin-hint">Comme dans le jeu : des mots en <span class='kw'>orange souligné</span> dans les textes ouvrent ce panneau au clic. Définissez ici chaque effet (nom + description), puis sélectionnez un mot dans un texte et choisissez l'effet avec « 🔖 Mot-clé » dans la barre d'outils.</p>
             <div class="admin-grid">${effectsHtml}</div>
         </details>`;
 }
