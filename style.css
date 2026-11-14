@@ -359,7 +359,7 @@ h1 { color: var(--primary-color); margin-bottom: 5px; }
 .sync-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* --- Mots-clés jaunes soulignés et panneau « Effets associés » --- */
-.kw { color: #ffd479; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; cursor: pointer; }
+.kw { color: #ff0500; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; cursor: pointer; }
 .kw:hover { color: #ffe8b0; }
 .effects-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); z-index: 1500; display: flex; justify-content: center; align-items: center; }
 .effects-box { position: relative; width: min(460px, 92vw); max-height: 86vh; overflow-y: auto; background: #1d2733; border: 1px solid #3a4756; border-radius: 14px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.55); text-align: left; }
