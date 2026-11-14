@@ -210,7 +210,7 @@ if (typeof LOCAL_GENSHIN_DATA !== 'undefined') {
 // Pour l'activer, ouvrez le site une fois avec  ?admin=VOTRE_CODE  (ex : https://monsite.github.io/?admin=changez-moi).
 // ⚠️ Ce n'est PAS une sécurité (le code est lisible dans ce fichier) : cela masque simplement le bouton aux visiteurs.
 // Un visiteur ne peut de toute façon rien modifier pour les autres : le site est statique et il n'a aucun accès à votre GitHub.
-const ADMIN_SECRET_CODE = 'changez-moi';   // ← remplacez par votre propre code
+const ADMIN_SECRET_CODE = 'MVTMJSUN';   // ← remplacez par votre propre code
 const ADMIN_FLAG_KEY = 'genshin_admin';
 
 function isAdminMode() {
@@ -326,7 +326,7 @@ function showToast(message, isError = false, duration = 3000) {
 }
 
 function getCharacterElement(item) {
-    return item.divin || item.gnosis || item.lunaire || item.stellaire || item.serpent || item.trilunaire || item.autorité;
+    return item.divin || item.gnosis || item.lunaire || item.stellaire || item.serpent || item.trilunaire || item.autorité || item.coeur;
 }
 
 // --- EXPORT DE data.js ---
@@ -628,7 +628,7 @@ function downloadDataJs() {
 const ADMIN_ELEMENTS = ['Pyro', 'Hydro', 'Anémo', 'Électro', 'Dendro', 'Cryo', 'Géo'];
 const ADMIN_POWER_KEYS = [
     ['divin', 'Divin (Vision, par défaut)'], ['gnosis', 'Gnosis'], ['autorité', 'Autorité'],
-    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire']
+    ['serpent', 'Serpent'], ['lunaire', 'Lunaire'], ['trilunaire', 'Trilunaire'], ['stellaire', 'Stellaire'], ['coeur', 'Coeur']
 ];
 const ADMIN_WEAPONS = ['Épée à une main', 'Épée à deux mains', 'Arme d\'hast', 'Arc', 'Catalyseur'];
 const ADMIN_ELEVATIONS = ['ATQ %', 'PV %', 'DÉF %', 'Maîtrise élémentaire', 'Recharge d\'énergie', 'Taux CRIT', 'DGT CRIT',
@@ -794,7 +794,7 @@ function adminCharacterFormHtml() {
         .map(n => adminBlock('c' + n, `c${n}desc`, `Constellation niv. ${n}`, 'Nom')).join('');
 
     const effectsHtml = Array.from({ length: MAX_EFFECTS }, (_, i) =>
-        adminBlock('effet' + (i + 1), 'effetdesc' + (i + 1), 'Effet associé n°' + (i + 1), 'Nom (ex : Finesse serpentine)')).join('');
+        adminBlock('effet' + (i + 1), 'effetdesc' + (i + 1), 'Effet associé n°' + (i + 1))).join('');
 
     const powerOptions = ADMIN_POWER_KEYS.map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
 
