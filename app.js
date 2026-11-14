@@ -2465,12 +2465,6 @@ function render() {
                 `;
             }
 
-            const effects = getCharacterEffects(item);
-            if (effects.length) {
-                cardHTML += `<div class="effects-chips"><span>🔖 Effets associés :</span> ${effects.map(effect =>
-                    `<button type="button" class="effect-chip" data-effet="${escapeHtml(effect.nom)}">${escapeHtml(effect.nom)}</button>`).join('')}</div>`;
-            }
-
             card.innerHTML = cardHTML;
             card.addEventListener('click', () => openDetails(item, 'characters'));
         }
