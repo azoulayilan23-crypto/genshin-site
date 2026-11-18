@@ -376,3 +376,8 @@ h1 { color: var(--primary-color); margin-bottom: 5px; }
 .effect-chip { background: transparent; border: 1px solid #5a4a22; color: #ffd479; border-radius: 14px; padding: 3px 10px; font-size: 0.82rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font-family: inherit; }
 .effect-chip:hover { background: rgba(255, 212, 121, 0.12); }
 .admin-toolbar select.kw-select { width: auto; max-width: 260px; padding: 6px 10px; font-size: 0.85rem; }
+
+/* --- Barre : boutons « Mot-clé » (un par effet) --- */
+.kw-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.kw-btn { background: var(--input-bg); color: #ffa500; border: 1px solid #5a4a22; border-radius: 14px; padding: 4px 12px; font-size: 0.85rem; font-weight: bold; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font-family: inherit; }
+.kw-btn:hover { background: rgba(255, 165, 0, 0.12); }

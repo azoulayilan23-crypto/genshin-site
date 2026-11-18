@@ -828,7 +828,7 @@ function adminCharacterFormHtml() {
 
         <details class="admin-section">
             <summary>🔖 Effets associés (facultatif)</summary>
-            <p class="admin-hint">Comme dans le jeu : des mots en <span class='kw'>orange souligné</span> dans les textes ouvrent ce panneau au clic. Définissez ici chaque effet (nom + description), puis sélectionnez un mot dans un texte et choisissez l'effet avec « 🔖 Mot-clé » dans la barre d'outils.</p>
+            <p class="admin-hint">Comme dans le jeu : des mots en <span class='kw'>jaune souligné</span> dans les textes ouvrent ce panneau au clic. Définissez ici chaque effet (nom + description), puis sélectionnez un mot dans un texte et choisissez l'effet avec « 🔖 Mot-clé » dans la barre d'outils.</p>
             <div class="admin-grid">${effectsHtml}</div>
         </details>`;
 }
@@ -1221,7 +1221,8 @@ function adminToolbarHtml(category) {
                 <input type="color" id="adminColorPicker" value="#4a90e2"></label>
             <button type="button" id="adminColorClear" class="admin-btn small">✖ Retirer la couleur</button>
             ${category === 'characters' ? `<span class="admin-toolbar-sep"></span>
-            <select id="adminKeywordSelect" class="kw-select" title="Rend le texte sélectionné jaune, souligné et cliquable : il ouvre l'effet associé choisi"><option value="">🔖 Mot-clé (définissez d'abord un effet)</option></select>
+            <span class="admin-toolbar-label">🔖 Mot-clé :</span>
+            <span id="adminKeywordButtons" class="kw-buttons"></span>
             <button type="button" id="adminKeywordClear" class="admin-btn small">✖ Retirer le mot-clé</button>` : ''}
             <span class="admin-hint-inline">Sélectionnez du texte dans une zone de texte, puis choisissez un style ou une couleur (un second clic sur un style le retire). Raccourcis : Ctrl+B, Ctrl+I, Ctrl+U.</span>
         </div>`;
@@ -1420,21 +1421,27 @@ function clearKeyword() {
     replaceTextareaRegion(ta, start, end, inner, 0, inner.length);
 }
 
-// Liste des effets définis dans le formulaire (noms saisis), proposée par le menu « Mot-clé »
-function refreshKeywordOptions(form) {
-    const select = form.querySelector('#adminKeywordSelect');
-    if (!select) return;
-    const names = [...form.querySelectorAll('input[data-key^="effet"]')].map(el => el.value.trim()).filter(Boolean);
-    select.innerHTML = '';
-    const first = document.createElement('option');
-    first.value = '';
-    first.textContent = names.length ? '🔖 Mot-clé : choisir l\'effet…' : '🔖 Mot-clé (définissez d\'abord un effet)';
-    select.appendChild(first);
+// Un bouton par effet défini dans le formulaire (noms saisis) : sélectionnez un texte, puis cliquez sur l'effet voulu
+function refreshKeywordButtons(form) {
+    const holder = form.querySelector('#adminKeywordButtons');
+    if (!holder) return;
+    const names = [...new Set([...form.querySelectorAll('input[data-key^="effet"]')].map(el => el.value.trim()).filter(Boolean))];
+    holder.innerHTML = '';
+    if (!names.length) {
+        const hint = document.createElement('span');
+        hint.className = 'admin-hint-inline';
+        hint.textContent = 'définissez d\'abord un effet (section « 🔖 Effets associés » plus bas)';
+        holder.appendChild(hint);
+        return;
+    }
     names.forEach(name => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        select.appendChild(option);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'kw-btn';
+        button.setAttribute('data-effet', name);
+        button.title = 'Rend le texte sélectionné jaune, souligné et cliquable : il ouvre l\'effet « ' + name + ' »';
+        button.textContent = name;
+        holder.appendChild(button);
     });
 }
 
@@ -1473,15 +1480,16 @@ function setupAdminToolbar(form) {
     });
     document.getElementById('adminColorPicker').addEventListener('change', (e) => applyTextColor(e.target.value));
     document.getElementById('adminColorClear').addEventListener('click', clearTextColor);
-    const kwSelect = document.getElementById('adminKeywordSelect');
-    if (kwSelect) {
-        ['mousedown', 'focus'].forEach(type => kwSelect.addEventListener(type, () => refreshKeywordOptions(form)));
-        kwSelect.addEventListener('change', () => {
-            const name = kwSelect.value;
-            if (name) applyKeyword(name);
-            kwSelect.value = '';
+    const kwHolder = document.getElementById('adminKeywordButtons');
+    if (kwHolder) {
+        kwHolder.addEventListener('click', (e) => {
+            const button = e.target.closest('.kw-btn');
+            if (button) applyKeyword(button.getAttribute('data-effet'));
         });
-        refreshKeywordOptions(form);
+        form.addEventListener('input', (e) => {
+            if (e.target.matches && e.target.matches('input[data-key^="effet"]')) refreshKeywordButtons(form);
+        });
+        refreshKeywordButtons(form);
     }
     const kwClear = document.getElementById('adminKeywordClear');
     if (kwClear) kwClear.addEventListener('click', clearKeyword);
@@ -1841,6 +1849,7 @@ function renderAdmin(grid) {
     if (editing && !adminEditTarget) setupEditPicker(grid);
     if (editing && adminEditTarget) {
         adminEditCtx = prefillForm(form, adminCategory, adminEditTarget);
+        refreshKeywordButtons(form);
         const cancelBtn = document.getElementById('editCancelBtn');
         if (cancelBtn) cancelBtn.addEventListener('click', () => { adminEditTarget = null; renderAdmin(grid); });
     }
